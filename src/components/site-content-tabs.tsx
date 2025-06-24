@@ -13,6 +13,7 @@ import { TabName, useContentTabs } from 'src/hooks/use-content-tabs';
 import { useImportExport } from 'src/hooks/use-import-export';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { cx } from 'src/lib/cx';
+import { WizardHatToolkit } from 'src/modules/wizard-hat-toolkit';
 
 export function SiteContentTabs() {
 	const { selectedSite } = useSiteDetails();
@@ -60,6 +61,7 @@ export function SiteContentTabs() {
 						{ name === 'settings' && <ContentTabSettings selectedSite={ selectedSite } /> }
 						{ name === 'assistant' && <ContentTabAssistant selectedSite={ selectedSite } /> }
 						{ name === 'import-export' && <ContentTabImportExport selectedSite={ selectedSite } /> }
+						{ name === 'wizard-hat-toolkit' && <WizardHatToolkit /> }
 					</div>
 				) }
 			</TabPanel>

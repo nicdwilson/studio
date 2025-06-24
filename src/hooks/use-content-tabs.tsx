@@ -2,7 +2,7 @@ import { TabPanel } from '@wordpress/components';
 import { useI18n } from '@wordpress/react-i18n';
 import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
 
-export type TabName = 'overview' | 'sync' | 'settings' | 'assistant' | 'import-export' | 'previews';
+export type TabName = 'overview' | 'sync' | 'settings' | 'assistant' | 'import-export' | 'previews' | 'wizard-hat-toolkit';
 type Tab = React.ComponentProps< typeof TabPanel >[ 'tabs' ][ number ] & {
 	name: TabName;
 };
@@ -42,12 +42,20 @@ function useTabs() {
 			}
 		);
 
-		tabs.push( {
-			order: 6,
-			name: 'assistant',
-			title: __( 'Assistant' ),
-			className: 'components-tab-panel__tabs--assistant ltr:pl-8 rtl:pr-8 ltr:ml-auto rtl:mr-auto',
-		} );
+		tabs.push(
+			{
+				order: 6,
+				name: 'wizard-hat-toolkit',
+				title: __( 'Wizard Hat' ),
+				className: 'components-tab-panel__tabs--wizard-hat ltr:pl-4 rtl:pr-4',
+			},
+			{
+				order: 7,
+				name: 'assistant',
+				title: __( 'Assistant' ),
+				className: 'components-tab-panel__tabs--assistant ltr:pl-8 rtl:pr-8 ltr:ml-auto rtl:mr-auto',
+			}
+		);
 
 		return tabs.sort( ( a, b ) => a.order - b.order );
 	}, [ __ ] );

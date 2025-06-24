@@ -120,6 +120,9 @@ const api: IpcApi = {
 	comparePaths: ( path1, path2 ) => ipcRendererInvoke( 'comparePaths', path1, path2 ),
 	listWpContentFolders: ( siteId, subdir ) =>
 		ipcRenderer.invoke( 'listWpContentFolders', siteId, subdir ),
+	installPluginFromPrivateRepo: ( options ) =>
+		ipcRendererInvoke( 'installPluginFromPrivateRepo', options ),
+	validateGitHubToken: ( token ) => ipcRendererInvoke( 'validateGitHubToken', token ),
 };
 
 contextBridge.exposeInMainWorld( 'ipcApi', api );

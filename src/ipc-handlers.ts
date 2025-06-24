@@ -75,6 +75,7 @@ import {
 import { DEFAULT_PHP_VERSION, DEFAULT_WORDPRESS_VERSION } from 'vendor/wp-now/src/constants';
 import type { SyncSite } from 'src/hooks/use-fetch-wpcom-sites/types';
 import type { WpCliResult } from 'src/lib/wp-cli-process';
+import os from 'os';
 
 const TEMP_DIR = nodePath.join( app.getPath( 'temp' ), 'com.wordpress.studio' ) + nodePath.sep;
 if ( ! fs.existsSync( TEMP_DIR ) ) {
@@ -1399,5 +1400,150 @@ export async function listWpContentFolders(
 			} );
 	} catch ( err ) {
 		return [];
+	}
+}
+
+export async function installPluginFromPrivateRepo(
+	_event: IpcMainInvokeEvent,
+	{
+		siteId,
+		repositoryUrl,
+		githubToken,
+		pluginName,
+	}: {
+		siteId: string;
+		repositoryUrl: string;
+		githubToken: string;
+		pluginName: string;
+	}
+): Promise< { success: boolean; error?: string } > {
+	console.log( `[Wizard Hat] Starting installation of ${ pluginName } from ${ repositoryUrl }` );
+	
+	const server = SiteServer.get( siteId );
+	if ( ! server ) {
+		console.error( `[Wizard Hat] Site not found: ${ siteId }` );
+		throw new Error( 'Site not found.' );
+	}
+
+	const tempDir = nodePath.join( os.tmpdir(), `wizard-hat-plugin-${ Date.now() }` );
+	const zipPath = `${ tempDir }.zip`;
+
+	console.log( `[Wizard Hat] Using temp directory: ${ tempDir }` );
+	console.log( `[Wizard Hat] ZIP file will be: ${ zipPath }` );
+
+	try {
+		// --- NEW LOGIC: Handle all-plugins repo as a ZIP download ---
+		const allPluginsMatch = repositoryUrl.match(
+			/^https:\/\/github\.com\/woocommerce\/all-plugins(?:\.git)?(?:\/)?(?:#.*)?$/i
+		);
+		let isAllPlugins = false;
+		let zipDownloadUrl = '';
+		if (allPluginsMatch || repositoryUrl.includes('woocommerce/all-plugins')) {
+			// Try to extract the plugin slug from the pluginName or repositoryUrl
+			// Assume pluginName is the slug (e.g., 'woocommerce-subscriptions')
+			const slug = pluginName;
+			zipDownloadUrl = `https://github.com/woocommerce/all-plugins/raw/master/product-packages/${slug}/${slug}.zip`;
+			isAllPlugins = true;
+			console.log(`[Wizard Hat] Detected all-plugins repo, will download ZIP from: ${zipDownloadUrl}`);
+		}
+
+		if (isAllPlugins) {
+			// Download the ZIP file directly with authentication if token is provided
+			const { download } = await import('src/lib/download');
+			const headers = githubToken ? { Authorization: `token ${githubToken}` } : undefined;
+			await download(zipDownloadUrl, zipPath, false, pluginName, headers);
+			console.log(`[Wizard Hat] Downloaded ZIP to ${zipPath}`);
+		} else {
+			// --- EXISTING LOGIC: Clone the repository ---
+			const authUrl = repositoryUrl.replace( 'https://', `https://${ githubToken }@` );
+			console.log( `[Wizard Hat] Created authenticated URL (token masked)` );
+			console.log( `[Wizard Hat] Cloning repository...` );
+			await promiseExec( `git clone ${ authUrl } ${ tempDir }` );
+			console.log( `[Wizard Hat] Repository cloned successfully` );
+
+			// Check if the directory was created and has content
+			const tempDirExists = await fsPromises.access( tempDir ).then( () => true ).catch( () => false );
+			if ( ! tempDirExists ) {
+				throw new Error( 'Failed to create temporary directory' );
+			}
+			const tempDirContents = await fsPromises.readdir( tempDir );
+			console.log( `[Wizard Hat] Temp directory contents:`, tempDirContents );
+
+			// Create ZIP file (excluding .git directory)
+			console.log( `[Wizard Hat] Creating ZIP file...` );
+			await promiseExec( `cd ${ tempDir } && zip -r ${ zipPath } . -x "*.git*"` );
+			console.log( `[Wizard Hat] ZIP file created successfully` );
+		}
+
+		// Check if ZIP file was created
+		const zipExists = await fsPromises.access( zipPath ).then( () => true ).catch( () => false );
+		if ( ! zipExists ) {
+			throw new Error( 'Failed to create ZIP file' );
+		}
+		
+		const zipStats = await fsPromises.stat( zipPath );
+		console.log( `[Wizard Hat] ZIP file size: ${ zipStats.size } bytes` );
+
+		// Install the ZIP file via WP-CLI
+		console.log( `[Wizard Hat] Installing via WP-CLI: plugin install ${ zipPath } --activate` );
+		const result = await server.executeWpCliCommand( `plugin install ${ zipPath } --activate` );
+
+		console.log( `[Wizard Hat] WP-CLI result:`, {
+			exitCode: result.exitCode,
+			stdout: result.stdout,
+			stderr: result.stderr
+		} );
+
+		if ( result.exitCode !== 0 ) {
+			throw new Error( `WP-CLI installation failed: ${ result.stderr }` );
+		}
+
+		console.log( `[Wizard Hat] Plugin installed successfully!` );
+		return { success: true };
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		console.error( `[Wizard Hat] Error installing plugin ${ pluginName }:`, error );
+		return { success: false, error: errorMessage };
+	} finally {
+		// Clean up temporary files
+		console.log( `[Wizard Hat] Cleaning up temporary files...` );
+		try {
+			await fsPromises.rm( tempDir, { recursive: true, force: true } );
+			await fsPromises.unlink( zipPath ).catch( () => {} ); // Ignore if file doesn't exist
+			console.log( `[Wizard Hat] Cleanup completed` );
+		} catch ( cleanupError ) {
+			console.error( '[Wizard Hat] Cleanup error:', cleanupError );
+		}
+	}
+}
+
+export async function validateGitHubToken(
+	_event: IpcMainInvokeEvent,
+	token: string
+): Promise< { valid: boolean; user?: string; error?: string } > {
+	try {
+		if ( !token || token.length === 0 ) {
+			return { valid: false, error: 'Token is empty' };
+		}
+
+		// Test the GitHub API to validate the token
+		const response = await fetch( 'https://api.github.com/user', {
+			headers: {
+				'Authorization': `token ${ token }`,
+				'Accept': 'application/vnd.github.v3+json'
+			}
+		} );
+
+		if ( response.ok ) {
+			const userData = await response.json();
+			console.log( 'GitHub token validated for user:', userData.login );
+			return { valid: true, user: userData.login };
+		} else {
+			console.error( 'GitHub token validation failed:', response.status, response.statusText );
+			return { valid: false, error: `Token validation failed: ${ response.status } ${ response.statusText }` };
+		}
+	} catch ( error ) {
+		console.error( 'GitHub token validation error:', error );
+		return { valid: false, error: error instanceof Error ? error.message : String( error ) };
 	}
 }
