@@ -123,6 +123,7 @@ const api: IpcApi = {
 	installPluginFromPrivateRepo: ( options ) =>
 		ipcRendererInvoke( 'installPluginFromPrivateRepo', options ),
 	validateGitHubToken: ( token ) => ipcRendererInvoke( 'validateGitHubToken', token ),
+	getAvailablePremiumPlugins: ( token ) => ipcRendererInvoke( 'getAvailablePremiumPlugins', token ),
 };
 
 contextBridge.exposeInMainWorld( 'ipcApi', api );

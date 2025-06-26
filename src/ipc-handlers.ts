@@ -76,6 +76,7 @@ import { DEFAULT_PHP_VERSION, DEFAULT_WORDPRESS_VERSION } from 'vendor/wp-now/sr
 import type { SyncSite } from 'src/hooks/use-fetch-wpcom-sites/types';
 import type { WpCliResult } from 'src/lib/wp-cli-process';
 import os from 'os';
+import fetch from 'node-fetch';
 
 const TEMP_DIR = nodePath.join( app.getPath( 'temp' ), 'com.wordpress.studio' ) + nodePath.sep;
 if ( ! fs.existsSync( TEMP_DIR ) ) {
@@ -1432,27 +1433,181 @@ export async function installPluginFromPrivateRepo(
 	console.log( `[Wizard Hat] ZIP file will be: ${ zipPath }` );
 
 	try {
-		// --- NEW LOGIC: Handle all-plugins repo as a ZIP download ---
+		// --- NEW LOGIC: Handle all-plugins repo using GitHub API ---
 		const allPluginsMatch = repositoryUrl.match(
 			/^https:\/\/github\.com\/woocommerce\/all-plugins(?:\.git)?(?:\/)?(?:#.*)?$/i
 		);
 		let isAllPlugins = false;
 		let zipDownloadUrl = '';
+		
 		if (allPluginsMatch || repositoryUrl.includes('woocommerce/all-plugins')) {
-			// Try to extract the plugin slug from the pluginName or repositoryUrl
-			// Assume pluginName is the slug (e.g., 'woocommerce-subscriptions')
-			const slug = pluginName;
-			zipDownloadUrl = `https://github.com/woocommerce/all-plugins/raw/master/product-packages/${slug}/${slug}.zip`;
 			isAllPlugins = true;
-			console.log(`[Wizard Hat] Detected all-plugins repo, will download ZIP from: ${zipDownloadUrl}`);
+			console.log(`[Wizard Hat] Detected all-plugins repo, using GitHub API to find download URL`);
+			
+			// Use GitHub API to traverse the repository and find the correct download URL
+			const pluginSlug = pluginName;
+
+			try {
+				// 1. Get the latest commit SHA for all-plugins
+				const commitsResponse = await fetch('https://api.github.com/repos/woocommerce/all-plugins/commits', {
+					headers: {
+						'Authorization': `token ${githubToken}`,
+						'Accept': 'application/vnd.github.v3+json',
+						'User-Agent': 'Wizard Hat Toolkit'
+					}
+				});
+				
+				if (!commitsResponse.ok) {
+					throw new Error(`Failed to fetch commits: ${commitsResponse.status} ${commitsResponse.statusText}`);
+				}
+				
+				const commits = await commitsResponse.json();
+				const treeSha = commits[0].commit.tree.sha;
+				console.log(`[Wizard Hat] Latest commit SHA: ${treeSha}`);
+
+				// 2. Get the tree for the latest commit
+				const treeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${treeSha}`, {
+					headers: {
+						'Authorization': `token ${githubToken}`,
+						'Accept': 'application/vnd.github.v3+json',
+						'User-Agent': 'Wizard Hat Toolkit'
+					}
+				});
+				
+				if (!treeResponse.ok) {
+					throw new Error(`Failed to fetch tree: ${treeResponse.status} ${treeResponse.statusText}`);
+				}
+				
+				const tree = await treeResponse.json();
+
+				// 3. Find the product-packages directory SHA
+				const productPackages = tree.tree.find((item: any) => item.path === 'product-packages');
+				if (!productPackages) {
+					throw new Error('product-packages directory not found in repository');
+				}
+				console.log(`[Wizard Hat] Found product-packages directory`);
+
+				// 4. Get the tree for product-packages
+				const packagesTreeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${productPackages.sha}`, {
+					headers: {
+						'Authorization': `token ${githubToken}`,
+						'Accept': 'application/vnd.github.v3+json',
+						'User-Agent': 'Wizard Hat Toolkit'
+					}
+				});
+				
+				if (!packagesTreeResponse.ok) {
+					throw new Error(`Failed to fetch packages tree: ${packagesTreeResponse.status} ${packagesTreeResponse.statusText}`);
+				}
+				
+				const packagesTree = await packagesTreeResponse.json();
+
+				// 5. Find the plugin directory
+				const pluginDir = packagesTree.tree.find((item: any) => item.path === pluginSlug);
+				if (!pluginDir) {
+					throw new Error(`Plugin '${pluginSlug}' not found in product-packages directory`);
+				}
+				console.log(`[Wizard Hat] Found plugin directory: ${pluginSlug}`);
+
+				// 6. Get the contents of the plugin directory
+				const contentsResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/contents/product-packages/${pluginSlug}`, {
+					headers: {
+						'Authorization': `token ${githubToken}`,
+						'Accept': 'application/vnd.github.v3+json',
+						'User-Agent': 'Wizard Hat Toolkit'
+					}
+				});
+				
+				if (!contentsResponse.ok) {
+					throw new Error(`Failed to fetch contents: ${contentsResponse.status} ${contentsResponse.statusText}`);
+				}
+				
+				const contents = await contentsResponse.json();
+
+				// 7. Find the zip file
+				const zipFile = contents.find((file: any) => file.name === `${pluginSlug}.zip`);
+				if (!zipFile) {
+					throw new Error(`Zip file '${pluginSlug}.zip' not found for plugin`);
+				}
+				
+				zipDownloadUrl = zipFile.download_url;
+				console.log(`[Wizard Hat] Found download URL: ${zipDownloadUrl}`);
+				console.log(`[Wizard Hat] Zip file details:`, {
+					name: zipFile.name,
+					size: zipFile.size,
+					download_url: zipDownloadUrl,
+					path: zipFile.path
+				});
+				
+				// Test the download URL with a HEAD request
+				try {
+					const headResponse = await fetch(zipDownloadUrl, {
+						method: 'HEAD',
+						headers: {
+							'Authorization': `token ${githubToken}`,
+							'User-Agent': 'Wizard Hat Toolkit'
+						}
+					});
+					
+					console.log(`[Wizard Hat] HEAD request result:`, {
+						status: headResponse.status,
+						statusText: headResponse.statusText,
+						contentLength: headResponse.headers.get('content-length'),
+						contentType: headResponse.headers.get('content-type')
+					});
+					
+					if (!headResponse.ok) {
+						throw new Error(`HEAD request failed: ${headResponse.status} ${headResponse.statusText}`);
+					}
+				} catch (headError) {
+					console.warn(`[Wizard Hat] HEAD request failed:`, headError);
+				}
+			} catch (apiError) {
+				console.error(`[Wizard Hat] GitHub API error:`, apiError);
+				throw new Error(`Failed to find plugin download URL: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+			}
 		}
 
-		if (isAllPlugins) {
-			// Download the ZIP file directly with authentication if token is provided
+		if (isAllPlugins && zipDownloadUrl) {
+			// Download the ZIP file directly with authentication
 			const { download } = await import('src/lib/download');
-			const headers = githubToken ? { Authorization: `token ${githubToken}` } : undefined;
-			await download(zipDownloadUrl, zipPath, false, pluginName, headers);
-			console.log(`[Wizard Hat] Downloaded ZIP to ${zipPath}`);
+			const headers = githubToken ? { 
+				Authorization: `token ${githubToken}`,
+				'User-Agent': 'Wizard Hat Toolkit'
+			} : undefined;
+			
+			console.log(`[Wizard Hat] Downloading ZIP from: ${zipDownloadUrl}`);
+			console.log(`[Wizard Hat] Download headers:`, headers ? { ...headers, Authorization: '***' } : 'None');
+			console.log(`[Wizard Hat] Target ZIP path: ${zipPath}`);
+			
+			try {
+				await download(zipDownloadUrl, zipPath, false, pluginName, headers);
+				console.log(`[Wizard Hat] Download completed successfully`);
+				
+				// Verify the downloaded file
+				const downloadStats = await fsPromises.stat(zipPath);
+				console.log(`[Wizard Hat] Downloaded file size: ${downloadStats.size} bytes`);
+				
+				if (downloadStats.size === 0) {
+					throw new Error('Downloaded file is empty (0 bytes)');
+				}
+				
+				// Check if it's actually a zip file
+				const fileBuffer = await fsPromises.readFile(zipPath);
+				const isZipFile = fileBuffer.slice(0, 4).toString('hex') === '504b0304';
+				console.log(`[Wizard Hat] File is valid ZIP: ${isZipFile}`);
+				
+				if (!isZipFile) {
+					// Read the first few bytes to see what we actually got
+					const fileContent = fileBuffer.slice(0, 200).toString('utf8');
+					console.log(`[Wizard Hat] File content preview:`, fileContent);
+					throw new Error('Downloaded file is not a valid ZIP file');
+				}
+				
+			} catch (downloadError) {
+				console.error(`[Wizard Hat] Download failed:`, downloadError);
+				throw new Error(`Failed to download plugin: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`);
+			}
 		} else {
 			// --- EXISTING LOGIC: Clone the repository ---
 			const authUrl = repositoryUrl.replace( 'https://', `https://${ githubToken }@` );
@@ -1484,9 +1639,98 @@ export async function installPluginFromPrivateRepo(
 		const zipStats = await fsPromises.stat( zipPath );
 		console.log( `[Wizard Hat] ZIP file size: ${ zipStats.size } bytes` );
 
+		// Debug: Inspect ZIP file contents
+		try {
+			console.log( `[Wizard Hat] Inspecting ZIP file contents...` );
+			const { exec } = await import('child_process');
+			const { promisify } = await import('util');
+			const execAsync = promisify(exec);
+			
+			// List contents of the ZIP file
+			const { stdout: zipContents } = await execAsync(`unzip -l "${zipPath}"`);
+			console.log( `[Wizard Hat] ZIP file contents:\n${zipContents}` );
+			
+			// Check if the ZIP contains the expected plugin structure
+			const hasPluginFile = zipContents.includes(`${pluginName}.php`);
+			const hasReadmeFile = zipContents.includes('readme.txt');
+			console.log( `[Wizard Hat] ZIP contains ${pluginName}.php: ${hasPluginFile}` );
+			console.log( `[Wizard Hat] ZIP contains readme.txt: ${hasReadmeFile}` );
+			
+			if (!hasPluginFile) {
+				console.warn( `[Wizard Hat] Warning: ZIP file does not contain expected plugin file ${pluginName}.php` );
+				
+				// Check if the plugin files are in a subdirectory
+				const lines = zipContents.split('\n');
+				const pluginFileInSubdir = lines.find(line => line.includes(`${pluginName}.php`));
+				
+				if (pluginFileInSubdir) {
+					console.log( `[Wizard Hat] Found plugin file in subdirectory: ${pluginFileInSubdir}` );
+					
+					// Extract and repackage the zip file
+					console.log( `[Wizard Hat] Extracting and repackaging ZIP file...` );
+					
+					// Create a temporary extraction directory
+					const extractDir = `${tempDir}-extract`;
+					await fsPromises.mkdir(extractDir, { recursive: true });
+					
+					// Extract the zip file
+					await execAsync(`unzip -q "${zipPath}" -d "${extractDir}"`);
+					
+					// List the extracted contents
+					const extractedContents = await fsPromises.readdir(extractDir);
+					console.log( `[Wizard Hat] Extracted contents:`, extractedContents );
+					
+					// Find the plugin directory (should be the only directory)
+					const pluginDir = extractedContents.find(item => {
+						try {
+							return fs.statSync(nodePath.join(extractDir, item)).isDirectory();
+						} catch {
+							return false;
+						}
+					});
+					
+					if (pluginDir) {
+						console.log( `[Wizard Hat] Found plugin directory: ${pluginDir}` );
+						
+						// Create a new zip file with the plugin files at the root
+						const newZipPath = `${tempDir}-fixed.zip`;
+						await execAsync(`cd "${nodePath.join(extractDir, pluginDir)}" && zip -r "${newZipPath}" .`);
+						
+						// Replace the original zip file
+						await fsPromises.unlink(zipPath);
+						await fsPromises.rename(newZipPath, zipPath);
+						
+						console.log( `[Wizard Hat] Repackaged ZIP file created: ${zipPath}` );
+						
+						// Verify the new zip contents
+						const { stdout: newZipContents } = await execAsync(`unzip -l "${zipPath}"`);
+						console.log( `[Wizard Hat] New ZIP file contents:\n${newZipContents}` );
+					} else {
+						console.warn( `[Wizard Hat] Could not find plugin directory in extracted contents` );
+					}
+					
+					// Clean up extraction directory
+					await fsPromises.rm(extractDir, { recursive: true, force: true });
+				}
+			}
+		} catch (debugError) {
+			console.warn( `[Wizard Hat] Could not inspect ZIP contents:`, debugError );
+		}
+
 		// Install the ZIP file via WP-CLI
 		console.log( `[Wizard Hat] Installing via WP-CLI: plugin install ${ zipPath } --activate` );
-		const result = await server.executeWpCliCommand( `plugin install ${ zipPath } --activate` );
+		
+		// Copy the zip file to the WordPress directory since WP-CLI runs in PHP-WASM
+		// and can't access the temp directory directly
+		const wpZipPath = nodePath.join(server.details.path, `${pluginName}.zip`);
+		console.log( `[Wizard Hat] Copying zip file to WordPress directory: ${wpZipPath}` );
+		await fsPromises.copyFile(zipPath, wpZipPath);
+		
+		// Use relative path for WP-CLI
+		const relativeZipPath = `${pluginName}.zip`;
+		console.log( `[Wizard Hat] Using relative path for WP-CLI: ${relativeZipPath}` );
+		
+		const result = await server.executeWpCliCommand( `plugin install ${ relativeZipPath } --activate` );
 
 		console.log( `[Wizard Hat] WP-CLI result:`, {
 			exitCode: result.exitCode,
@@ -1510,6 +1754,11 @@ export async function installPluginFromPrivateRepo(
 		try {
 			await fsPromises.rm( tempDir, { recursive: true, force: true } );
 			await fsPromises.unlink( zipPath ).catch( () => {} ); // Ignore if file doesn't exist
+			
+			// Clean up the copied zip file in WordPress directory
+			const wpZipPath = nodePath.join(server.details.path, `${pluginName}.zip`);
+			await fsPromises.unlink( wpZipPath ).catch( () => {} ); // Ignore if file doesn't exist
+			
 			console.log( `[Wizard Hat] Cleanup completed` );
 		} catch ( cleanupError ) {
 			console.error( '[Wizard Hat] Cleanup error:', cleanupError );
@@ -1545,5 +1794,87 @@ export async function validateGitHubToken(
 	} catch ( error ) {
 		console.error( 'GitHub token validation error:', error );
 		return { valid: false, error: error instanceof Error ? error.message : String( error ) };
+	}
+}
+
+export async function getAvailablePremiumPlugins(
+	_event: IpcMainInvokeEvent,
+	githubToken: string
+): Promise< { success: boolean; plugins?: Array<{ name: string; label: string }>; error?: string } > {
+	try {
+		console.log(`[Wizard Hat] Fetching available premium plugins...`);
+		
+		// 1. Get the latest commit SHA for all-plugins
+		const commitsResponse = await fetch('https://api.github.com/repos/woocommerce/all-plugins/commits', {
+			headers: {
+				'Authorization': `token ${githubToken}`,
+				'Accept': 'application/vnd.github.v3+json',
+				'User-Agent': 'Wizard Hat Toolkit'
+			}
+		});
+		
+		if (!commitsResponse.ok) {
+			throw new Error(`Failed to fetch commits: ${commitsResponse.status} ${commitsResponse.statusText}`);
+		}
+		
+		const commits = await commitsResponse.json();
+		const treeSha = commits[0].commit.tree.sha;
+		console.log(`[Wizard Hat] Latest commit SHA: ${treeSha}`);
+
+		// 2. Get the tree for the latest commit
+		const treeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${treeSha}`, {
+			headers: {
+				'Authorization': `token ${githubToken}`,
+				'Accept': 'application/vnd.github.v3+json',
+				'User-Agent': 'Wizard Hat Toolkit'
+			}
+		});
+		
+		if (!treeResponse.ok) {
+			throw new Error(`Failed to fetch tree: ${treeResponse.status} ${treeResponse.statusText}`);
+		}
+		
+		const tree = await treeResponse.json();
+
+		// 3. Find the product-packages directory SHA
+		const productPackages = tree.tree.find((item: any) => item.path === 'product-packages');
+		if (!productPackages) {
+			throw new Error('product-packages directory not found in repository');
+		}
+		console.log(`[Wizard Hat] Found product-packages directory`);
+
+		// 4. Get the tree for product-packages
+		const packagesTreeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${productPackages.sha}`, {
+			headers: {
+				'Authorization': `token ${githubToken}`,
+				'Accept': 'application/vnd.github.v3+json',
+				'User-Agent': 'Wizard Hat Toolkit'
+			}
+		});
+		
+		if (!packagesTreeResponse.ok) {
+			throw new Error(`Failed to fetch packages tree: ${packagesTreeResponse.status} ${packagesTreeResponse.statusText}`);
+		}
+		
+		const packagesTree = await packagesTreeResponse.json();
+
+		// 5. Extract plugin names from the tree
+		const plugins = packagesTree.tree
+			.filter((item: any) => item.type === 'tree') // Only directories
+			.map((item: any) => ({
+				name: item.path,
+				label: item.path.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) // Convert slug to readable name
+			}))
+			.sort((a: any, b: any) => a.label.localeCompare(b.label)); // Sort alphabetically
+
+		console.log(`[Wizard Hat] Found ${plugins.length} premium plugins`);
+		return { success: true, plugins };
+		
+	} catch (error) {
+		console.error(`[Wizard Hat] Error fetching premium plugins:`, error);
+		return { 
+			success: false, 
+			error: error instanceof Error ? error.message : String(error) 
+		};
 	}
 }

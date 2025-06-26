@@ -1,7 +1,7 @@
 import { __ } from '@wordpress/i18n';
 import { useI18n } from '@wordpress/react-i18n';
-import { Button, TextControl, Card, SelectControl } from '@wordpress/components';
-import { useState, useEffect } from 'react';
+import { Button, TextControl, Card, SelectControl, CheckboxControl, Spinner } from '@wordpress/components';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getIpcApi } from 'src/lib/get-ipc-api';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 
@@ -12,34 +12,38 @@ interface PluginOption {
 	repository?: string; // GitHub repository URL for premium plugins
 }
 
+// Common premium plugins that users frequently install
+const COMMON_PREMIUM_PLUGINS: PluginOption[] = [
+	{ label: 'WooCommerce Subscriptions', value: 'woocommerce-subscriptions', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+	{ label: 'WooCommerce Bookings', value: 'woocommerce-bookings', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+	{ label: 'WooCommerce Memberships', value: 'woocommerce-memberships', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+	{ label: 'WooCommerce Product Bundles', value: 'woocommerce-product-bundles', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+	{ label: 'WooCommerce Composite Products', value: 'woocommerce-composite-products', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+	{ label: 'WooCommerce Advanced Notifications', value: 'woocommerce-advanced-notifications', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+	{ label: 'WooCommerce Customer Order CSV Export', value: 'woocommerce-customer-order-csv-export', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+	{ label: 'WooCommerce Product CSV Import Suite', value: 'woocommerce-product-csv-import-suite', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
+];
+
 const COMMON_WOOCOMMERCE_PLUGINS: PluginOption[] = [
-	{ label: 'woocommerce', value: 'woocommerce', type: 'public' },
-	{ label: 'woocommerce-payments', value: 'woocommerce-payments', type: 'public' },
-	{ label: 'woocommerce-subscriptions', value: 'woocommerce-subscriptions', type: 'public' },
-	{ label: 'woocommerce-bookings', value: 'woocommerce-bookings', type: 'public' },
-	{ label: 'woocommerce-memberships', value: 'woocommerce-memberships', type: 'public' },
-	{ label: 'woocommerce-product-bundles', value: 'woocommerce-product-bundles', type: 'public' },
-	{ label: 'woocommerce-composite-products', value: 'woocommerce-composite-products', type: 'public' },
-	{ label: 'woocommerce-min-max-quantities', value: 'woocommerce-min-max-quantities', type: 'public' },
-	{ label: 'woocommerce-name-your-price', value: 'woocommerce-name-your-price', type: 'public' },
-	{ label: 'woocommerce-product-addons', value: 'woocommerce-product-addons', type: 'public' },
-	{ label: 'woocommerce-checkout-add-ons', value: 'woocommerce-checkout-add-ons', type: 'public' },
-	{ label: 'woocommerce-deposits', value: 'woocommerce-deposits', type: 'public' },
-	{ label: 'woocommerce-conditional-shipping-and-payments', value: 'woocommerce-conditional-shipping-and-payments', type: 'public' },
-	{ label: 'woocommerce-advanced-notifications', value: 'woocommerce-advanced-notifications', type: 'public' },
-	{ label: 'woocommerce-bulk-stock-management', value: 'woocommerce-bulk-stock-management', type: 'public' },
-	{ label: 'woocommerce-cost-of-goods', value: 'woocommerce-cost-of-goods', type: 'public' },
-	{ label: 'woocommerce-customer-order-csv-export', value: 'woocommerce-customer-order-csv-export', type: 'public' },
-	{ label: 'woocommerce-order-barcodes', value: 'woocommerce-order-barcodes', type: 'public' },
-	{ label: 'woocommerce-pdf-product-vouchers', value: 'woocommerce-pdf-product-vouchers', type: 'public' },
-	{ label: 'woocommerce-points-and-rewards', value: 'woocommerce-points-and-rewards', type: 'public' },
-	{ label: 'woocommerce-product-csv-import-suite', value: 'woocommerce-product-csv-import-suite', type: 'public' },
-	{ label: 'woocommerce-product-vendors', value: 'woocommerce-product-vendors', type: 'public' },
-	{ label: 'woocommerce-shipment-tracking', value: 'woocommerce-shipment-tracking', type: 'public' },
-	{ label: 'woocommerce-shipping-per-product', value: 'woocommerce-shipping-per-product', type: 'public' },
-	{ label: 'woocommerce-table-rate-shipping', value: 'woocommerce-table-rate-shipping', type: 'public' },
-	{ label: 'woocommerce-waitlist', value: 'woocommerce-waitlist', type: 'public' },
-	{ label: 'woocommerce-wholesale-prices', value: 'woocommerce-wholesale-prices', type: 'public' },
+	{ label: 'WooCommerce', value: 'woocommerce', type: 'public' },
+	{ label: 'WooCommerce Payments', value: 'woocommerce-payments', type: 'public' },
+	{ label: 'WooCommerce Min/Max Quantities', value: 'woocommerce-min-max-quantities', type: 'public' },
+	{ label: 'WooCommerce Name Your Price', value: 'woocommerce-name-your-price', type: 'public' },
+	{ label: 'WooCommerce Product Add-ons', value: 'woocommerce-product-addons', type: 'public' },
+	{ label: 'WooCommerce Checkout Add-ons', value: 'woocommerce-checkout-add-ons', type: 'public' },
+	{ label: 'WooCommerce Deposits', value: 'woocommerce-deposits', type: 'public' },
+	{ label: 'WooCommerce Conditional Shipping and Payments', value: 'woocommerce-conditional-shipping-and-payments', type: 'public' },
+	{ label: 'WooCommerce Bulk Stock Management', value: 'woocommerce-bulk-stock-management', type: 'public' },
+	{ label: 'WooCommerce Cost of Goods', value: 'woocommerce-cost-of-goods', type: 'public' },
+	{ label: 'WooCommerce Order Barcodes', value: 'woocommerce-order-barcodes', type: 'public' },
+	{ label: 'WooCommerce PDF Product Vouchers', value: 'woocommerce-pdf-product-vouchers', type: 'public' },
+	{ label: 'WooCommerce Points and Rewards', value: 'woocommerce-points-and-rewards', type: 'public' },
+	{ label: 'WooCommerce Product Vendors', value: 'woocommerce-product-vendors', type: 'public' },
+	{ label: 'WooCommerce Shipment Tracking', value: 'woocommerce-shipment-tracking', type: 'public' },
+	{ label: 'WooCommerce Shipping Per Product', value: 'woocommerce-shipping-per-product', type: 'public' },
+	{ label: 'WooCommerce Table Rate Shipping', value: 'woocommerce-table-rate-shipping', type: 'public' },
+	{ label: 'WooCommerce Waitlist', value: 'woocommerce-waitlist', type: 'public' },
+	{ label: 'WooCommerce Wholesale Prices', value: 'woocommerce-wholesale-prices', type: 'public' },
 ];
 
 export function WizardHatPluginManagement() {
@@ -52,9 +56,26 @@ export function WizardHatPluginManagement() {
 	const [installing, setInstalling] = useState(false);
 	const [githubToken, setGithubToken] = useState('');
 	const [tokenValid, setTokenValid] = useState(false);
-	const [premiumPlugins, setPremiumPlugins] = useState<PluginOption[]>([]);
+	const [allPremiumPlugins, setAllPremiumPlugins] = useState<PluginOption[]>([]);
 	const [loadingPremiumPlugins, setLoadingPremiumPlugins] = useState(false);
 	const [installationLog, setInstallationLog] = useState<string[]>([]);
+	const [searchTerm, setSearchTerm] = useState('');
+	const [showSearchResults, setShowSearchResults] = useState(false);
+	const searchRef = useRef<HTMLDivElement>(null);
+
+	// Click outside handler to close search results
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+				setShowSearchResults(false);
+			}
+		};
+
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	}, []);
 
 	if (!selectedSite) {
 		return (
@@ -103,30 +124,42 @@ export function WizardHatPluginManagement() {
 			} else {
 				console.error('GitHub token validation failed:', result.error);
 				setTokenValid(false);
-				setPremiumPlugins([]);
+				setAllPremiumPlugins([]);
 			}
 		} catch (error) {
 			console.error('Token validation error:', error);
 			setTokenValid(false);
-			setPremiumPlugins([]);
+			setAllPremiumPlugins([]);
 		}
 	};
 
 	const loadPremiumPlugins = async (token: string) => {
 		setLoadingPremiumPlugins(true);
 		try {
-			// In a real implementation, this would fetch from WooCommerce's private repositories
-			// For now, we'll simulate with some premium plugin names
-			const premiumOptions: PluginOption[] = [
-				{ label: 'woocommerce-subscriptions', value: 'woocommerce-subscriptions', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
-				{ label: 'woocommerce-bookings', value: 'woocommerce-bookings', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
-				{ label: 'woocommerce-memberships', value: 'woocommerce-memberships', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
-				{ label: 'woocommerce-product-bundles', value: 'woocommerce-product-bundles', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
-				{ label: 'woocommerce-composite-products', value: 'woocommerce-composite-products', type: 'premium', repository: 'https://github.com/woocommerce/all-plugins' },
-			];
-			setPremiumPlugins(premiumOptions);
+			console.log('🚀🚀🚀 LOADING PREMIUM PLUGINS FROM REPO 🚀🚀🚀');
+			
+			// Use the new IPC handler to fetch available premium plugins
+			const result = await getIpcApi().getAvailablePremiumPlugins(token);
+			
+			if (result.success && result.plugins) {
+				console.log('🚀🚀🚀 LOADED PREMIUM PLUGINS:', result.plugins.length);
+				
+				// Convert to PluginOption format
+				const premiumOptions: PluginOption[] = result.plugins.map(plugin => ({
+					label: plugin.label,
+					value: plugin.name,
+					type: 'premium' as const,
+					repository: 'https://github.com/woocommerce/all-plugins'
+				}));
+				
+				setAllPremiumPlugins(premiumOptions);
+			} else {
+				console.error('Failed to load premium plugins:', result.error);
+				setAllPremiumPlugins([]);
+			}
 		} catch (error) {
 			console.error('Error loading premium plugins:', error);
+			setAllPremiumPlugins([]);
 		} finally {
 			setLoadingPremiumPlugins(false);
 		}
@@ -146,6 +179,44 @@ export function WizardHatPluginManagement() {
 		);
 	};
 
+	// Filter premium plugins based on search term
+	const filteredPremiumPlugins = useMemo(() => {
+		if (searchTerm.length < 3) {
+			return [];
+		}
+		
+		const term = searchTerm.toLowerCase();
+		return allPremiumPlugins
+			.filter(plugin => 
+				plugin.label.toLowerCase().includes(term) ||
+				plugin.value.toLowerCase().includes(term)
+			)
+			.filter(plugin => !selectedPlugins.includes(plugin.value)) // Exclude already selected
+			.slice(0, 10); // Limit to 10 results for better UX
+	}, [searchTerm, allPremiumPlugins, selectedPlugins]);
+
+	// Debounced search handler
+	const handleSearchChange = useCallback((value: string) => {
+		setSearchTerm(value);
+		if (value.length >= 3) {
+			setShowSearchResults(true);
+		} else {
+			setShowSearchResults(false);
+		}
+	}, []);
+
+	const addPremiumPluginFromSearch = (pluginValue: string) => {
+		if (!selectedPlugins.includes(pluginValue)) {
+			setSelectedPlugins(prev => [...prev, pluginValue]);
+			setSearchTerm(''); // Clear search
+			setShowSearchResults(false);
+		}
+	};
+
+	const removePlugin = (pluginValue: string) => {
+		setSelectedPlugins(prev => prev.filter(p => p !== pluginValue));
+	};
+
 	const installSelectedPlugins = async () => {
 		console.log('🚀🚀🚀 INSTALL SELECTED PLUGINS FUNCTION CALLED - NEW CODE VERSION 🚀🚀🚀');
 		console.log('🚀🚀🚀 TIMESTAMP:', new Date().toISOString());
@@ -162,7 +233,7 @@ export function WizardHatPluginManagement() {
 				await startServer(selectedSite.id);
 			}
 
-			const allPlugins = [...COMMON_WOOCOMMERCE_PLUGINS, ...premiumPlugins];
+			const allPlugins = [...COMMON_WOOCOMMERCE_PLUGINS, ...allPremiumPlugins];
 			const pluginsToInstall = allPlugins.filter(plugin => selectedPlugins.includes(plugin.value));
 			
 			console.log('🚀🚀🚀 PLUGINS TO INSTALL:', pluginsToInstall);
@@ -198,7 +269,7 @@ export function WizardHatPluginManagement() {
 								siteId: selectedSite.id,
 								repositoryUrl: plugin.repository!,
 								githubToken,
-								pluginName: plugin.label,
+								pluginName: plugin.value,
 							});
 							console.log(`[Wizard Hat Frontend] Installation result:`, result);
 
@@ -363,70 +434,182 @@ export function WizardHatPluginManagement() {
 					{__('Select Plugins to Install')}
 				</h3>
 				
-				{/* Common Plugins */}
+				{/* Common Public Plugins */}
 				<div className="mb-6">
 					<h4 className="text-md font-medium text-gray-700 mb-3">
-						{__('Common WooCommerce Plugins')}
+						{__('Common WooCommerce Plugins (Public)')}
 					</h4>
 					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
 						{COMMON_WOOCOMMERCE_PLUGINS.map((plugin) => (
-							<label
+							<CheckboxControl
 								key={plugin.value}
-								className="flex items-center space-x-2 p-2 rounded border hover:bg-gray-50 cursor-pointer"
-							>
-								<input
-									type="checkbox"
-									checked={selectedPlugins.includes(plugin.value)}
-									onChange={() => togglePlugin(plugin.value)}
-									className="rounded"
-								/>
-								<span className="text-sm">{plugin.label}</span>
-							</label>
+								label={plugin.label}
+								checked={selectedPlugins.includes(plugin.value)}
+								onChange={() => togglePlugin(plugin.value)}
+							/>
 						))}
 					</div>
 				</div>
 
-				{/* Premium Plugins */}
+				{/* Common Premium Plugins */}
 				{tokenValid && (
 					<div className="mb-6">
 						<h4 className="text-md font-medium text-gray-700 mb-3">
-							{__('Premium Plugins')}
+							{__('Common Premium Plugins')}
 						</h4>
-						{loadingPremiumPlugins ? (
-							<p className="text-gray-600">{__('Loading premium plugins...')}</p>
-						) : (
-							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-								{premiumPlugins.map((plugin) => (
-									<label
-										key={plugin.value}
-										className="flex items-center space-x-2 p-2 rounded border hover:bg-gray-50 cursor-pointer bg-blue-50"
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+							{COMMON_PREMIUM_PLUGINS.map((plugin) => (
+								<CheckboxControl
+									key={plugin.value}
+									label={plugin.label}
+									checked={selectedPlugins.includes(plugin.value)}
+									onChange={() => togglePlugin(plugin.value)}
+								/>
+							))}
+						</div>
+					</div>
+				)}
+
+				{/* All Premium Plugins Search */}
+				{tokenValid && (
+					<div className="mb-6" ref={searchRef}>
+						<h4 className="text-md font-medium text-gray-700 mb-3">
+							{__('Search Premium Plugins')}
+						</h4>
+						<div className="space-y-3">
+							<div className="flex gap-2">
+								<TextControl
+									label={__('Search plugins (type 3+ characters)')}
+									value={searchTerm}
+									onChange={handleSearchChange}
+									placeholder={__('Search for premium plugins...')}
+									disabled={loadingPremiumPlugins}
+									onFocus={() => {
+										if (searchTerm.length >= 3) {
+											setShowSearchResults(true);
+										}
+									}}
+									className="flex-1"
+								/>
+								{searchTerm.length > 0 && (
+									<Button
+										variant="tertiary"
+										onClick={() => {
+											setSearchTerm('');
+											setShowSearchResults(false);
+										}}
+										className="self-end"
 									>
-										<input
-											type="checkbox"
-											checked={selectedPlugins.includes(plugin.value)}
-											onChange={() => togglePlugin(plugin.value)}
-											className="rounded"
-										/>
-										<span className="text-sm font-medium">{plugin.label}</span>
-									</label>
-								))}
+										{__('Clear')}
+									</Button>
+								)}
 							</div>
-						)}
+							
+							{/* Search Results */}
+							{showSearchResults && (
+								<div className="border border-gray-200 rounded-lg max-h-60 overflow-y-auto bg-white shadow-lg">
+									{filteredPremiumPlugins.length > 0 ? (
+										<div className="divide-y divide-gray-100">
+											{filteredPremiumPlugins.map((plugin) => (
+												<div
+													key={plugin.value}
+													className="flex items-center justify-between p-3 hover:bg-blue-50 cursor-pointer transition-colors"
+													onClick={() => addPremiumPluginFromSearch(plugin.value)}
+												>
+													<div className="flex-1">
+														<div className="font-medium text-gray-900">{plugin.label}</div>
+														<div className="text-sm text-gray-500">{plugin.value}</div>
+													</div>
+													<Button
+														variant="tertiary"
+														size="small"
+														onClick={(e: React.MouseEvent) => {
+															e.stopPropagation();
+															addPremiumPluginFromSearch(plugin.value);
+														}}
+													>
+														{__('Add')}
+													</Button>
+												</div>
+											))}
+										</div>
+									) : searchTerm.length >= 3 ? (
+										<div className="p-4 text-center text-gray-500">
+											{__('No plugins found matching your search.')}
+										</div>
+									) : null}
+								</div>
+							)}
+							
+							{loadingPremiumPlugins && (
+								<div className="flex items-center gap-2 text-sm text-gray-600">
+									<Spinner />
+									{__('Loading premium plugins...')}
+								</div>
+							)}
+							
+							{!loadingPremiumPlugins && allPremiumPlugins.length > 0 && (
+								<div className="text-sm text-gray-500">
+									{__('Available premium plugins:')} {allPremiumPlugins.length}
+								</div>
+							)}
+						</div>
+					</div>
+				)}
+
+				{/* Selected Plugins List */}
+				{selectedPlugins.length > 0 && (
+					<div className="mb-6">
+						<h4 className="text-md font-medium text-gray-700 mb-3">
+							{__('Selected Plugins')} ({selectedPlugins.length})
+						</h4>
+						<div className="space-y-2">
+							{selectedPlugins.map((pluginValue) => {
+								const allPlugins = [...COMMON_WOOCOMMERCE_PLUGINS, ...COMMON_PREMIUM_PLUGINS, ...allPremiumPlugins];
+								const plugin = allPlugins.find(p => p.value === pluginValue);
+								return (
+									<div key={pluginValue} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+										<span className="text-sm">
+											{plugin?.label || pluginValue}
+											{plugin?.type === 'premium' && (
+												<span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+													{__('Premium')}
+												</span>
+											)}
+										</span>
+										<Button
+											variant="tertiary"
+											onClick={() => removePlugin(pluginValue)}
+											className="text-red-600 hover:text-red-800"
+										>
+											{__('Remove')}
+										</Button>
+									</div>
+								);
+							})}
+						</div>
 					</div>
 				)}
 
 				{/* Install Button */}
 				<div className="flex justify-between items-center">
-					<span className="text-sm text-gray-600">
-						{selectedPlugins.length > 0 && `${selectedPlugins.length} plugin(s) selected`}
-					</span>
 					<Button
 						variant="primary"
 						onClick={installSelectedPlugins}
-						disabled={selectedPlugins.length === 0 || isLoading || installing}
+						disabled={selectedPlugins.length === 0 || installing || isLoading}
 					>
 						{installing ? __('Installing...') : __('Install Selected Plugins')}
 					</Button>
+					
+					{selectedPlugins.length > 0 && (
+						<Button
+							variant="tertiary"
+							onClick={() => setSelectedPlugins([])}
+							disabled={installing}
+						>
+							{__('Clear All')}
+						</Button>
+					)}
 				</div>
 			</Card>
 
