@@ -52,6 +52,8 @@ const api: IpcApi = {
 	openURL: ( url ) => ipcRendererSend( 'openURL', url ),
 	showOpenFolderDialog: ( title, defaultDialogPath ) =>
 		ipcRendererInvoke( 'showOpenFolderDialog', title, defaultDialogPath ),
+	showOpenFileDialog: ( title, defaultDialogPath, filters ) =>
+		ipcRendererInvoke( 'showOpenFileDialog', title, defaultDialogPath, filters ),
 	isCATrusted: () => ipcRenderer.invoke( 'isCATrusted' ),
 	trustCertificate: () => ipcRenderer.invoke( 'trustCertificate' ),
 	showSaveAsDialog: ( options ) => ipcRendererInvoke( 'showSaveAsDialog', options ),
@@ -124,6 +126,7 @@ const api: IpcApi = {
 		ipcRendererInvoke( 'installPluginFromPrivateRepo', options ),
 	validateGitHubToken: ( token ) => ipcRendererInvoke( 'validateGitHubToken', token ),
 	getAvailablePremiumPlugins: ( token ) => ipcRendererInvoke( 'getAvailablePremiumPlugins', token ),
+	importWooCommerceBlueprint: ( options ) => ipcRendererInvoke( 'importWooCommerceBlueprint', options ),
 };
 
 contextBridge.exposeInMainWorld( 'ipcApi', api );

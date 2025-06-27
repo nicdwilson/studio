@@ -46,7 +46,7 @@ function useTabs() {
 			{
 				order: 6,
 				name: 'wizard-hat-toolkit',
-				title: __( 'Wizard Hat' ),
+				title: __( 'WooCommerce' ),
 				className: 'components-tab-panel__tabs--wizard-hat ltr:pl-4 rtl:pr-4',
 			},
 			{

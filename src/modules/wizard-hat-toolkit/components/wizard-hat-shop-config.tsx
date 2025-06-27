@@ -112,7 +112,7 @@ export function WizardHatShopConfig() {
 	if (!selectedSite) {
 		return (
 			<div className="space-y-8">
-				<div className="max-w-3xl">
+				<div className="max-w-3xl px-8">
 					<h2 className="text-xl font-semibold text-gray-900 mb-4">
 						{__('Shop Configuration')}
 					</h2>
@@ -164,7 +164,7 @@ export function WizardHatShopConfig() {
 
 	return (
 		<div className="space-y-8">
-			<div className="max-w-3xl">
+			<div className="max-w-3xl px-8">
 				<h2 className="text-xl font-semibold text-gray-900 mb-4">
 					{__('Shop Configuration Switcher')}
 				</h2>

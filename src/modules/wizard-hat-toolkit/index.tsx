@@ -5,9 +5,11 @@ import { WizardHatOverview } from './components/wizard-hat-overview';
 import { WizardHatJurassicTube } from './components/wizard-hat-jurassic-tube';
 import { WizardHatShopConfig } from './components/wizard-hat-shop-config';
 import { WizardHatPluginManagement } from './components/wizard-hat-plugin-management';
+import { WizardHatTools } from './components/wizard-hat-tools';
+import { WizardHatImportBlueprint } from './components/wizard-hat-import-blueprint';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 
-export type WizardHatTabName = 'overview' | 'jurassic-tube' | 'shop-config' | 'plugin-management';
+export type WizardHatTabName = 'overview' | 'shop-config' | 'plugin-management' | 'tools' | 'import-blueprint' | 'jurassic-tube';
 
 interface WizardHatTab {
 	name: WizardHatTabName;
@@ -22,19 +24,29 @@ const tabs: WizardHatTab[] = [
 		component: WizardHatOverview,
 	},
 	{
-		name: 'jurassic-tube',
-		label: __('Jurassic Tube'),
-		component: WizardHatJurassicTube,
-	},
-	{
 		name: 'shop-config',
-		label: __('Shop Config'),
+		label: __('Shop Switcher'),
 		component: WizardHatShopConfig,
 	},
 	{
 		name: 'plugin-management',
-		label: __('Plugin Management'),
+		label: __('Plugins'),
 		component: WizardHatPluginManagement,
+	},
+	{
+		name: 'tools',
+		label: __('Tools'),
+		component: WizardHatTools,
+	},
+	{
+		name: 'import-blueprint',
+		label: __('Import Blueprint'),
+		component: WizardHatImportBlueprint,
+	},
+	{
+		name: 'jurassic-tube',
+		label: __('Jurassic Tube'),
+		component: WizardHatJurassicTube,
 	},
 ];
 
@@ -85,7 +97,7 @@ export function WizardHatToolkit() {
 			<div className="space-y-6">
 				{/* Tab Navigation */}
 				<div className="border-b border-gray-200">
-					<nav className="-mb-px flex space-x-8">
+					<nav className="-mb-px flex space-x-8 px-4">
 						{tabs.map((tab) => (
 							<button
 								key={tab.name}

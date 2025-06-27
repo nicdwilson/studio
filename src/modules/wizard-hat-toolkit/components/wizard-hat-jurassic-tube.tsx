@@ -13,7 +13,7 @@ export function WizardHatJurassicTube() {
 	if (!selectedSite) {
 		return (
 			<div className="space-y-8">
-				<div className="max-w-3xl">
+				<div className="max-w-3xl px-8">
 					<h2 className="text-xl font-semibold text-gray-900 mb-4">
 						{__('Jurassic Tube')}
 					</h2>
@@ -155,7 +155,7 @@ export function WizardHatJurassicTube() {
 	if (!isInstalled) {
 		return (
 			<div className="space-y-8">
-				<div className="max-w-3xl">
+				<div className="max-w-3xl px-8">
 					<h2 className="text-xl font-semibold text-gray-900 mb-4">
 						{__('Jurassic Tube Setup')}
 					</h2>
@@ -222,7 +222,7 @@ export function WizardHatJurassicTube() {
 
 	return (
 		<div className="space-y-8">
-			<div className="max-w-3xl">
+			<div className="max-w-3xl px-8">
 				<h2 className="text-xl font-semibold text-gray-900 mb-4">
 					{__('Jurassic Tube Connection')}
 				</h2>

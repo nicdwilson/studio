@@ -579,6 +579,37 @@ export async function showOpenFolderDialog(
 	};
 }
 
+export async function showOpenFileDialog(
+	event: IpcMainInvokeEvent,
+	title: string,
+	defaultDialogPath: string,
+	filters?: Electron.FileFilter[]
+): Promise< { path: string; name: string } | null > {
+	const parentWindow = BrowserWindow.fromWebContents( event.sender );
+	if ( ! parentWindow ) {
+		throw new Error(
+			`No window found for sender of showOpenFileDialog message: ${ event.frameId }`
+		);
+	}
+
+	const { canceled, filePaths } = await dialog.showOpenDialog( parentWindow, {
+		title,
+		defaultPath: defaultDialogPath !== '' ? defaultDialogPath : DEFAULT_SITE_PATH,
+		properties: [
+			'openFile',
+		],
+		filters,
+	} );
+	if ( canceled ) {
+		return null;
+	}
+
+	return {
+		path: filePaths[ 0 ],
+		name: nodePath.basename( filePaths[ 0 ] ),
+	};
+}
+
 export async function saveUserLocale( event: IpcMainInvokeEvent, locale: string ) {
 	await updateAppdata( { locale } );
 }
@@ -1275,7 +1306,30 @@ export async function getFileContent( event: IpcMainInvokeEvent, filePath: strin
 		throw new Error( `File not found: ${ filePath }` );
 	}
 
-	return fs.readFileSync( filePath );
+	try {
+		// Read file as UTF-8 with BOM handling
+		const content = fs.readFileSync( filePath, 'utf8' );
+		// Remove BOM if present
+		return content.replace(/^\uFEFF/, '');
+	} catch ( error ) {
+		// Fallback: read as buffer and try different encodings
+		const buffer = fs.readFileSync( filePath );
+		
+		// Try different encodings
+		const encodings = ['utf8', 'utf16le', 'latin1', 'ascii'];
+		
+		for ( const encoding of encodings ) {
+			try {
+				const content = buffer.toString( encoding as BufferEncoding );
+				// Remove BOM if present
+				return content.replace(/^\uFEFF/, '');
+			} catch {
+				continue;
+			}
+		}
+		
+		throw new Error( `Unable to read file with any supported encoding: ${ filePath }` );
+	}
 }
 
 /**
@@ -1802,79 +1856,322 @@ export async function getAvailablePremiumPlugins(
 	githubToken: string
 ): Promise< { success: boolean; plugins?: Array<{ name: string; label: string }>; error?: string } > {
 	try {
-		console.log(`[Wizard Hat] Fetching available premium plugins...`);
-		
-		// 1. Get the latest commit SHA for all-plugins
-		const commitsResponse = await fetch('https://api.github.com/repos/woocommerce/all-plugins/commits', {
+		// Validate token first
+		const tokenValidation = await validateGitHubToken(_event, githubToken);
+		if (!tokenValidation.valid) {
+			return { success: false, error: tokenValidation.error || 'Invalid GitHub token' };
+		}
+
+		// Fetch plugins from the repository
+		const response = await fetch('https://api.github.com/repos/woocommerce/all-plugins/contents', {
 			headers: {
 				'Authorization': `token ${githubToken}`,
 				'Accept': 'application/vnd.github.v3+json',
-				'User-Agent': 'Wizard Hat Toolkit'
+				'User-Agent': 'WooCommerce-Studio'
 			}
 		});
-		
-		if (!commitsResponse.ok) {
-			throw new Error(`Failed to fetch commits: ${commitsResponse.status} ${commitsResponse.statusText}`);
-		}
-		
-		const commits = await commitsResponse.json();
-		const treeSha = commits[0].commit.tree.sha;
-		console.log(`[Wizard Hat] Latest commit SHA: ${treeSha}`);
 
-		// 2. Get the tree for the latest commit
-		const treeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${treeSha}`, {
-			headers: {
-				'Authorization': `token ${githubToken}`,
-				'Accept': 'application/vnd.github.v3+json',
-				'User-Agent': 'Wizard Hat Toolkit'
+		if (!response.ok) {
+			return { success: false, error: `GitHub API error: ${response.status} ${response.statusText}` };
+		}
+
+		const contents = await response.json() as any[];
+		const plugins: Array<{ name: string; label: string }> = [];
+
+		for (const item of contents) {
+			if (item.type === 'dir' && item.name.endsWith('.zip')) {
+				const pluginName = item.name.replace('.zip', '');
+				// Convert plugin name to a more readable label
+				const label = pluginName
+					.split('-')
+					.map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+					.join(' ');
+				plugins.push({ name: pluginName, label });
 			}
-		});
-		
-		if (!treeResponse.ok) {
-			throw new Error(`Failed to fetch tree: ${treeResponse.status} ${treeResponse.statusText}`);
 		}
-		
-		const tree = await treeResponse.json();
 
-		// 3. Find the product-packages directory SHA
-		const productPackages = tree.tree.find((item: any) => item.path === 'product-packages');
-		if (!productPackages) {
-			throw new Error('product-packages directory not found in repository');
-		}
-		console.log(`[Wizard Hat] Found product-packages directory`);
-
-		// 4. Get the tree for product-packages
-		const packagesTreeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${productPackages.sha}`, {
-			headers: {
-				'Authorization': `token ${githubToken}`,
-				'Accept': 'application/vnd.github.v3+json',
-				'User-Agent': 'Wizard Hat Toolkit'
-			}
-		});
-		
-		if (!packagesTreeResponse.ok) {
-			throw new Error(`Failed to fetch packages tree: ${packagesTreeResponse.status} ${packagesTreeResponse.statusText}`);
-		}
-		
-		const packagesTree = await packagesTreeResponse.json();
-
-		// 5. Extract plugin names from the tree
-		const plugins = packagesTree.tree
-			.filter((item: any) => item.type === 'tree') // Only directories
-			.map((item: any) => ({
-				name: item.path,
-				label: item.path.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) // Convert slug to readable name
-			}))
-			.sort((a: any, b: any) => a.label.localeCompare(b.label)); // Sort alphabetically
-
-		console.log(`[Wizard Hat] Found ${plugins.length} premium plugins`);
 		return { success: true, plugins };
-		
 	} catch (error) {
-		console.error(`[Wizard Hat] Error fetching premium plugins:`, error);
+		console.error('Error fetching premium plugins:', error);
+		return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+	}
+}
+
+export async function importWooCommerceBlueprint(
+	_event: IpcMainInvokeEvent,
+	{
+		siteId,
+		blueprintPath,
+		githubToken,
+	}: {
+		siteId: string;
+		blueprintPath: string;
+		githubToken?: string;
+	}
+): Promise< { success: boolean; error?: string; results?: Array<{ step: string; success: boolean; message: string }> } > {
+	try {
+		const site = SiteServer.get(siteId);
+		if (!site) {
+			return { success: false, error: 'Site not found' };
+		}
+
+		// Ensure site is running
+		if (!site.details.running) {
+			await site.start();
+		}
+
+		// Read and parse the blueprint file
+		const blueprintContent = await fsPromises.readFile(blueprintPath, 'utf8');
+		const blueprint = JSON.parse(blueprintContent);
+
+		if (!blueprint.steps || !Array.isArray(blueprint.steps)) {
+			return { success: false, error: 'Invalid blueprint format: missing or invalid steps array' };
+		}
+
+		const results: Array<{ step: string; success: boolean; message: string }> = [];
+
+		// Process each step in the blueprint
+		for (const step of blueprint.steps) {
+			try {
+				switch (step.step) {
+					case 'installPlugin':
+						await processInstallPluginStep(_event, site, step, githubToken, results);
+						break;
+					case 'installTheme':
+						await processInstallThemeStep(_event, site, step, results);
+						break;
+					case 'setSiteOptions':
+						await processSetSiteOptionsStep(_event, site, step, results);
+						break;
+					case 'runSql':
+						await processRunSqlStep(_event, site, step, results);
+						break;
+					default:
+						results.push({
+							step: step.step,
+							success: false,
+							message: `Unsupported step type: ${step.step}`
+						});
+				}
+			} catch (error) {
+				results.push({
+					step: step.step,
+					success: false,
+					message: error instanceof Error ? error.message : 'Unknown error'
+				});
+			}
+		}
+
+		const allSuccessful = results.every(result => result.success);
+		return { 
+			success: allSuccessful, 
+			results,
+			error: allSuccessful ? undefined : 'Some steps failed during import'
+		};
+
+	} catch (error) {
+		console.error('Error importing blueprint:', error);
 		return { 
 			success: false, 
-			error: error instanceof Error ? error.message : String(error) 
+			error: error instanceof Error ? error.message : 'Unknown error' 
 		};
+	}
+}
+
+async function processInstallPluginStep(
+	event: IpcMainInvokeEvent,
+	site: SiteServer,
+	step: any,
+	githubToken: string | undefined,
+	results: Array<{ step: string; success: boolean; message: string }>
+) {
+	const pluginData = step.pluginData;
+	const options = step.options || {};
+
+	if (pluginData.resource === 'wordpress.org/plugins') {
+		// WordPress.org plugin
+		const result = await executeWPCLiInline(event, {
+			siteId: site.details.id,
+			args: `plugin install ${pluginData.slug} --activate=${options.activate ? 'yes' : 'no'}`
+		});
+
+		if (result.exitCode === 0) {
+			results.push({
+				step: 'installPlugin',
+				success: true,
+				message: `Successfully installed WordPress.org plugin: ${pluginData.slug}`
+			});
+		} else {
+			results.push({
+				step: 'installPlugin',
+				success: false,
+				message: `Failed to install WordPress.org plugin ${pluginData.slug}: ${result.stderr}`
+			});
+		}
+	} else if (pluginData.resource === 'self/plugins') {
+		// Premium plugin from WooCommerce repository
+		if (!githubToken) {
+			results.push({
+				step: 'installPlugin',
+				success: false,
+				message: `GitHub token required for premium plugin: ${pluginData.slug}`
+			});
+			return;
+		}
+
+		const installResult = await installPluginFromPrivateRepo(event, {
+			siteId: site.details.id,
+			repositoryUrl: 'https://github.com/woocommerce/all-plugins',
+			githubToken,
+			pluginName: pluginData.slug
+		});
+
+		if (installResult.success) {
+			results.push({
+				step: 'installPlugin',
+				success: true,
+				message: `Successfully installed premium plugin: ${pluginData.slug}`
+			});
+		} else {
+			results.push({
+				step: 'installPlugin',
+				success: false,
+				message: `Failed to install premium plugin ${pluginData.slug}: ${installResult.error}`
+			});
+		}
+	} else {
+		results.push({
+			step: 'installPlugin',
+			success: false,
+			message: `Unsupported plugin resource type: ${pluginData.resource}`
+		});
+	}
+}
+
+async function processInstallThemeStep(
+	event: IpcMainInvokeEvent,
+	site: SiteServer,
+	step: any,
+	results: Array<{ step: string; success: boolean; message: string }>
+) {
+	const themeData = step.themeData;
+	const options = step.options || {};
+
+	if (themeData.resource === 'wordpress.org/themes') {
+		const result = await executeWPCLiInline(event, {
+			siteId: site.details.id,
+			args: `theme install ${themeData.slug} --activate=${options.activate ? 'yes' : 'no'}`
+		});
+
+		if (result.exitCode === 0) {
+			results.push({
+				step: 'installTheme',
+				success: true,
+				message: `Successfully installed theme: ${themeData.slug}`
+			});
+		} else {
+			results.push({
+				step: 'installTheme',
+				success: false,
+				message: `Failed to install theme ${themeData.slug}: ${result.stderr}`
+			});
+		}
+	} else {
+		results.push({
+			step: 'installTheme',
+			success: false,
+			message: `Unsupported theme resource type: ${themeData.resource}`
+		});
+	}
+}
+
+async function processSetSiteOptionsStep(
+	event: IpcMainInvokeEvent,
+	site: SiteServer,
+	step: any,
+	results: Array<{ step: string; success: boolean; message: string }>
+) {
+	const options = step.options;
+	let successCount = 0;
+	let totalCount = 0;
+
+	for (const [optionName, optionValue] of Object.entries(options)) {
+		totalCount++;
+		try {
+			// Handle different value types
+			let valueString: string;
+			if (typeof optionValue === 'object') {
+				valueString = JSON.stringify(optionValue);
+			} else {
+				valueString = String(optionValue);
+			}
+
+			// Escape the value for shell command
+			const escapedValue = valueString.replace(/'/g, "'\"'\"'");
+			
+			const result = await executeWPCLiInline(event, {
+				siteId: site.details.id,
+				args: `option set ${optionName} '${escapedValue}'`
+			});
+
+			if (result.exitCode === 0) {
+				successCount++;
+			}
+		} catch (error) {
+			console.error(`Error setting option ${optionName}:`, error);
+		}
+	}
+
+	if (successCount === totalCount) {
+		results.push({
+			step: 'setSiteOptions',
+			success: true,
+			message: `Successfully set ${successCount} site options`
+		});
+	} else {
+		results.push({
+			step: 'setSiteOptions',
+			success: false,
+			message: `Set ${successCount}/${totalCount} site options successfully`
+		});
+	}
+}
+
+async function processRunSqlStep(
+	event: IpcMainInvokeEvent,
+	site: SiteServer,
+	step: any,
+	results: Array<{ step: string; success: boolean; message: string }>
+) {
+	const sql = step.sql;
+
+	if (sql.resource === 'literal' && sql.contents) {
+		// Escape the SQL for shell command
+		const escapedSql = sql.contents.replace(/'/g, "'\"'\"'");
+		
+		const result = await executeWPCLiInline(event, {
+			siteId: site.details.id,
+			args: `db query '${escapedSql}'`
+		});
+
+		if (result.exitCode === 0) {
+				results.push({
+					step: 'runSql',
+					success: true,
+					message: `Successfully executed SQL: ${sql.name || 'unnamed query'}`
+				});
+		} else {
+			results.push({
+				step: 'runSql',
+				success: false,
+				message: `Failed to execute SQL ${sql.name || 'unnamed query'}: ${result.stderr}`
+			});
+		}
+	} else {
+		results.push({
+			step: 'runSql',
+			success: false,
+			message: `Unsupported SQL resource type: ${sql.resource}`
+		});
 	}
 }
