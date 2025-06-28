@@ -126,7 +126,8 @@ const api: IpcApi = {
 		ipcRendererInvoke( 'installPluginFromPrivateRepo', options ),
 	validateGitHubToken: ( token ) => ipcRendererInvoke( 'validateGitHubToken', token ),
 	getAvailablePremiumPlugins: ( token ) => ipcRendererInvoke( 'getAvailablePremiumPlugins', token ),
-	importWooCommerceBlueprint: ( options ) => ipcRendererInvoke( 'importWooCommerceBlueprint', options ),
+	importWooCommerceBlueprint: ( options ) =>
+		ipcRendererInvoke( 'importWooCommerceBlueprint', options ),
 };
 
 contextBridge.exposeInMainWorld( 'ipcApi', api );

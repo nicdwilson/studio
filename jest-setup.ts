@@ -7,9 +7,9 @@ import { jestPreviewConfigure } from 'jest-preview';
 import nock from 'nock';
 
 // Silence console.log for all tests
-beforeEach(() => {
+beforeEach( () => {
 	console.log = jest.fn();
-});
+} );
 
 if ( typeof window !== 'undefined' ) {
 	// The ipcListener global is usually defined in preload.ts

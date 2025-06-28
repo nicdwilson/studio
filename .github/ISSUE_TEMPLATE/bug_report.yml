@@ -1,6 +1,6 @@
 name: Bug Report
 description: Helps us improve our product!
-labels: [ 'Needs triage', '[Type] Bug' ]
+labels: ['Needs triage', '[Type] Bug']
 type: 'Bug'
 body:
   - type: markdown
@@ -20,7 +20,7 @@ body:
   - type: textarea
     id: summary
     attributes:
-        label: Quick summary
+      label: Quick summary
   - type: textarea
     id: steps
     attributes:

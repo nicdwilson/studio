@@ -6,7 +6,7 @@
 	"targets": {
 		"build": {
 			"executor": "nx:noop",
-			"dependsOn": ["build:package-json", "build:bundle"]
+			"dependsOn": [ "build:package-json", "build:bundle" ]
 		},
 		"build:package-json": {
 			"executor": "nx-extensions:package-json",
@@ -15,7 +15,7 @@
 				"outputPath": "dist/packages/wp-now",
 				"buildTarget": "wp-now:build:bundle"
 			},
-			"dependsOn": ["build:bundle"]
+			"dependsOn": [ "build:bundle" ]
 		},
 		"build:bundle": {
 			"executor": "nx:run-commands",
@@ -34,7 +34,7 @@
 			"options": {
 				"scriptPath": "dist/packages/wp-now/main.js"
 			},
-			"dependsOn": ["build", "^build"]
+			"dependsOn": [ "build", "^build" ]
 		},
 		"serve": {
 			"executor": "@nx/js:node",
@@ -53,14 +53,14 @@
 		},
 		"lint": {
 			"executor": "@nx/linter:eslint",
-			"outputs": ["{options.outputFile}"],
+			"outputs": [ "{options.outputFile}" ],
 			"options": {
-				"lintFilePatterns": ["packages/wp-now/**/*.ts"]
+				"lintFilePatterns": [ "packages/wp-now/**/*.ts" ]
 			}
 		},
 		"test": {
 			"executor": "@nx/vite:test",
-			"outputs": ["coverage/packages/wp-now"],
+			"outputs": [ "coverage/packages/wp-now" ],
 			"options": {
 				"passWithNoTests": true,
 				"reportsDirectory": "../../coverage/packages/wp-now/node",

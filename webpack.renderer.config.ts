@@ -22,11 +22,20 @@ plugins.push(
 			// Copy @wordpress/components stylesheets to the renderer directory
 			{
 				from: path.resolve( __dirname, 'node_modules/@wordpress/components/build-style/style.css' ),
-				to:  path.resolve( __dirname, '.webpack/renderer/main_window/styles/wordpress-components-style.css'),
+				to: path.resolve(
+					__dirname,
+					'.webpack/renderer/main_window/styles/wordpress-components-style.css'
+				),
 			},
 			{
-				from: path.resolve( __dirname, 'node_modules/@wordpress/components/build-style/style-rtl.css' ),
-				to: path.resolve( __dirname, '.webpack/renderer/main_window/styles/wordpress-components-style-rtl.css' ),
+				from: path.resolve(
+					__dirname,
+					'node_modules/@wordpress/components/build-style/style-rtl.css'
+				),
+				to: path.resolve(
+					__dirname,
+					'.webpack/renderer/main_window/styles/wordpress-components-style-rtl.css'
+				),
 			},
 		],
 	} )

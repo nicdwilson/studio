@@ -37,31 +37,29 @@ interface ImportResult {
 export function WizardHatImportBlueprint() {
 	const { __ } = useI18n();
 	const { selectedSite } = useSiteDetails();
-	const [selectedFile, setSelectedFile] = useState<string | null>(null);
-	const [blueprintData, setBlueprintData] = useState<BlueprintFile | null>(null);
-	const [isValidating, setIsValidating] = useState(false);
-	const [isImporting, setIsImporting] = useState(false);
-	const [importResults, setImportResults] = useState<ImportResult[]>([]);
-	const [error, setError] = useState<string | null>(null);
-	const [githubToken, setGithubToken] = useState('');
+	const [ selectedFile, setSelectedFile ] = useState< string | null >( null );
+	const [ blueprintData, setBlueprintData ] = useState< BlueprintFile | null >( null );
+	const [ isValidating, setIsValidating ] = useState( false );
+	const [ isImporting, setIsImporting ] = useState( false );
+	const [ importResults, setImportResults ] = useState< ImportResult[] >( [] );
+	const [ error, setError ] = useState< string | null >( null );
+	const [ githubToken, setGithubToken ] = useState( '' );
 
 	// Load GitHub token for premium plugins
-	useEffect(() => {
-		const savedToken = localStorage.getItem('wizard-hat-github-token');
-		if (savedToken) {
-			setGithubToken(savedToken);
+	useEffect( () => {
+		const savedToken = localStorage.getItem( 'wizard-hat-github-token' );
+		if ( savedToken ) {
+			setGithubToken( savedToken );
 		}
-	}, []);
+	}, [] );
 
-	if (!selectedSite) {
+	if ( ! selectedSite ) {
 		return (
 			<div className="space-y-8">
 				<div className="max-w-3xl px-8">
-					<h2 className="text-xl font-semibold text-gray-900 mb-4">
-						{__('Import Blueprint')}
-					</h2>
+					<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Import Blueprint' ) }</h2>
 					<p className="text-gray-600 mb-6">
-						{__('Please select a site to import a WooCommerce blueprint.')}
+						{ __( 'Please select a site to import a WooCommerce blueprint.' ) }
 					</p>
 				</div>
 			</div>
@@ -70,122 +68,136 @@ export function WizardHatImportBlueprint() {
 
 	const handleFileSelect = async () => {
 		try {
-			const result = await getIpcApi().showOpenFileDialog(
-				__('Select Blueprint File'),
-				'',
-				[{ name: 'JSON Files', extensions: ['json'] }]
-			);
+			const result = await getIpcApi().showOpenFileDialog( __( 'Select Blueprint File' ), '', [
+				{ name: 'JSON Files', extensions: [ 'json' ] },
+			] );
 
-			if (result) {
-				setSelectedFile(result.path);
-				setError(null);
-				setImportResults([]);
-				await validateBlueprintFile(result.path);
+			if ( result ) {
+				setSelectedFile( result.path );
+				setError( null );
+				setImportResults( [] );
+				await validateBlueprintFile( result.path );
 			}
-		} catch (error) {
-			console.error('Error selecting file:', error);
-			setError(__('Failed to select file. Please try again.'));
+		} catch ( error ) {
+			console.error( 'Error selecting file:', error );
+			setError( __( 'Failed to select file. Please try again.' ) );
 		}
 	};
 
-	const validateBlueprintFile = async (filePath: string) => {
-		setIsValidating(true);
-		setError(null);
+	const validateBlueprintFile = async ( filePath: string ) => {
+		setIsValidating( true );
+		setError( null );
 
 		try {
-			const fileContent = await getIpcApi().getFileContent(filePath);
-			
+			const fileContent = await getIpcApi().getFileContent( filePath );
+
 			// The getFileContent function already handles encoding and BOM removal
 			// and returns a string directly
 			let fileContentString: string = fileContent;
-			
+
 			// Remove BOM (Byte Order Mark) if present (extra safety)
-			fileContentString = fileContentString.replace(/^\uFEFF/, '');
-			
+			fileContentString = fileContentString.replace( /^\uFEFF/, '' );
+
 			// Check for common JSON issues
 			const trimmedContent = fileContentString.trim();
-			if (!trimmedContent.startsWith('{')) {
+			if ( ! trimmedContent.startsWith( '{' ) ) {
 				// Show the actual characters and their codes for debugging
-				const firstChars = trimmedContent.substring(0, 20);
-				const charCodes = Array.from(firstChars).map(char => char.charCodeAt(0)).join(',');
-				throw new Error(`Invalid JSON format: File must start with '{'. Found: "${firstChars}" (char codes: ${charCodes})`);
+				const firstChars = trimmedContent.substring( 0, 20 );
+				const charCodes = Array.from( firstChars )
+					.map( ( char ) => char.charCodeAt( 0 ) )
+					.join( ',' );
+				throw new Error(
+					`Invalid JSON format: File must start with '{'. Found: "${ firstChars }" (char codes: ${ charCodes })`
+				);
 			}
-			
-			if (!trimmedContent.endsWith('}')) {
-				throw new Error(`Invalid JSON format: File must end with '}'. Found: "...${trimmedContent.substring(trimmedContent.length - 20)}"`);
+
+			if ( ! trimmedContent.endsWith( '}' ) ) {
+				throw new Error(
+					`Invalid JSON format: File must end with '}'. Found: "...${ trimmedContent.substring(
+						trimmedContent.length - 20
+					) }"`
+				);
 			}
 
 			let blueprint: BlueprintFile;
 			try {
-				blueprint = JSON.parse(fileContentString) as BlueprintFile;
-			} catch (parseError) {
+				blueprint = JSON.parse( fileContentString ) as BlueprintFile;
+			} catch ( parseError ) {
 				// Provide more detailed JSON parsing error information
-				const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown JSON parsing error';
-				const firstLine = fileContentString.split('\n')[0];
-				throw new Error(`JSON parsing error: ${errorMessage}\n\nFirst line of file: "${firstLine}"`);
+				const errorMessage =
+					parseError instanceof Error ? parseError.message : 'Unknown JSON parsing error';
+				const firstLine = fileContentString.split( '\n' )[ 0 ];
+				throw new Error(
+					`JSON parsing error: ${ errorMessage }\n\nFirst line of file: "${ firstLine }"`
+				);
 			}
 
 			// Basic validation
-			if (!blueprint.steps || !Array.isArray(blueprint.steps)) {
-				throw new Error(__('Invalid blueprint format: missing or invalid steps array'));
+			if ( ! blueprint.steps || ! Array.isArray( blueprint.steps ) ) {
+				throw new Error( __( 'Invalid blueprint format: missing or invalid steps array' ) );
 			}
 
 			// Check for required WooCommerce version
-			const hasWooCommerce = blueprint.steps.some(step => 
-				step.step === 'installPlugin' && 
-				step.pluginData?.slug === 'woocommerce'
+			const hasWooCommerce = blueprint.steps.some(
+				( step ) => step.step === 'installPlugin' && step.pluginData?.slug === 'woocommerce'
 			);
 
-			if (!hasWooCommerce) {
-				setError(__('This blueprint does not include WooCommerce installation. Please ensure WooCommerce is already installed on your site.'));
+			if ( ! hasWooCommerce ) {
+				setError(
+					__(
+						'This blueprint does not include WooCommerce installation. Please ensure WooCommerce is already installed on your site.'
+					)
+				);
 			}
 
-			setBlueprintData(blueprint);
-		} catch (error) {
-			console.error('Error validating blueprint:', error);
-			setError(error instanceof Error ? error.message : __('Failed to validate blueprint file'));
-			setBlueprintData(null);
+			setBlueprintData( blueprint );
+		} catch ( error ) {
+			console.error( 'Error validating blueprint:', error );
+			setError(
+				error instanceof Error ? error.message : __( 'Failed to validate blueprint file' )
+			);
+			setBlueprintData( null );
 		} finally {
-			setIsValidating(false);
+			setIsValidating( false );
 		}
 	};
 
 	const handleImport = async () => {
-		if (!selectedFile || !blueprintData) {
+		if ( ! selectedFile || ! blueprintData ) {
 			return;
 		}
 
-		setIsImporting(true);
-		setImportResults([]);
-		setError(null);
+		setIsImporting( true );
+		setImportResults( [] );
+		setError( null );
 
 		try {
-			const result = await getIpcApi().importWooCommerceBlueprint({
+			const result = await getIpcApi().importWooCommerceBlueprint( {
 				siteId: selectedSite.id,
 				blueprintPath: selectedFile,
 				githubToken: githubToken || undefined,
-			});
+			} );
 
-			if (result.success) {
-				setImportResults(result.results || []);
-				getIpcApi().showNotification({
-					title: __('Success'),
-					body: __('Blueprint imported successfully!'),
-				});
+			if ( result.success ) {
+				setImportResults( result.results || [] );
+				getIpcApi().showNotification( {
+					title: __( 'Success' ),
+					body: __( 'Blueprint imported successfully!' ),
+				} );
 			} else {
-				setError(result.error || __('Import failed'));
-				setImportResults(result.results || []);
+				setError( result.error || __( 'Import failed' ) );
+				setImportResults( result.results || [] );
 			}
-		} catch (error) {
-			console.error('Error importing blueprint:', error);
-			setError(error instanceof Error ? error.message : __('Failed to import blueprint'));
+		} catch ( error ) {
+			console.error( 'Error importing blueprint:', error );
+			setError( error instanceof Error ? error.message : __( 'Failed to import blueprint' ) );
 		} finally {
-			setIsImporting(false);
+			setIsImporting( false );
 		}
 	};
 
 	const getStepSummary = () => {
-		if (!blueprintData) return null;
+		if ( ! blueprintData ) return null;
 
 		const summary = {
 			plugins: 0,
@@ -194,8 +206,8 @@ export function WizardHatImportBlueprint() {
 			sql: 0,
 		};
 
-		blueprintData.steps.forEach(step => {
-			switch (step.step) {
+		blueprintData.steps.forEach( ( step ) => {
+			switch ( step.step ) {
 				case 'installPlugin':
 					summary.plugins++;
 					break;
@@ -209,7 +221,7 @@ export function WizardHatImportBlueprint() {
 					summary.sql++;
 					break;
 			}
-		});
+		} );
 
 		return summary;
 	};
@@ -219,185 +231,180 @@ export function WizardHatImportBlueprint() {
 	return (
 		<div className="space-y-8">
 			<div className="max-w-3xl px-8">
-				<h2 className="text-xl font-semibold text-gray-900 mb-4">
-					{__('Import Blueprint')}
-				</h2>
+				<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Import Blueprint' ) }</h2>
 				<p className="text-gray-600 mb-6">
-					{__('Import a WooCommerce blueprint to automatically configure your site with plugins, themes, and settings.')}
+					{ __(
+						'Import a WooCommerce blueprint to automatically configure your site with plugins, themes, and settings.'
+					) }
 				</p>
 			</div>
 
-			{/* File Selection */}
+			{ /* File Selection */ }
 			<Card className="p-6">
 				<h3 className="text-lg font-medium text-gray-900 mb-4">
-					{__('Select Blueprint File')}
+					{ __( 'Select Blueprint File' ) }
 				</h3>
-				
+
 				<div className="space-y-4">
 					<Button
 						variant="secondary"
-						onClick={handleFileSelect}
-						disabled={isValidating || isImporting}
+						onClick={ handleFileSelect }
+						disabled={ isValidating || isImporting }
 					>
-						{selectedFile ? __('Change File') : __('Choose Blueprint File')}
+						{ selectedFile ? __( 'Change File' ) : __( 'Choose Blueprint File' ) }
 					</Button>
 
-					{selectedFile && (
+					{ selectedFile && (
 						<div className="text-sm text-gray-600">
-							{__('Selected file:')} {selectedFile}
+							{ __( 'Selected file:' ) } { selectedFile }
 						</div>
-					)}
+					) }
 
-					{isValidating && (
+					{ isValidating && (
 						<div className="flex items-center gap-2 text-sm text-gray-600">
 							<Spinner />
-							{__('Validating blueprint file...')}
+							{ __( 'Validating blueprint file...' ) }
 						</div>
-					)}
+					) }
 				</div>
 			</Card>
 
-			{/* Blueprint Summary */}
-			{blueprintData && stepSummary && (
+			{ /* Blueprint Summary */ }
+			{ blueprintData && stepSummary && (
 				<Card className="p-6">
-					<h3 className="text-lg font-medium text-gray-900 mb-4">
-						{__('Blueprint Summary')}
-					</h3>
-					
+					<h3 className="text-lg font-medium text-gray-900 mb-4">{ __( 'Blueprint Summary' ) }</h3>
+
 					<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 						<div className="text-center p-3 bg-blue-50 rounded-lg">
-							<div className="text-2xl font-bold text-blue-600">{stepSummary.plugins}</div>
-							<div className="text-sm text-gray-600">{__('Plugins')}</div>
+							<div className="text-2xl font-bold text-blue-600">{ stepSummary.plugins }</div>
+							<div className="text-sm text-gray-600">{ __( 'Plugins' ) }</div>
 						</div>
 						<div className="text-center p-3 bg-green-50 rounded-lg">
-							<div className="text-2xl font-bold text-green-600">{stepSummary.themes}</div>
-							<div className="text-sm text-gray-600">{__('Themes')}</div>
+							<div className="text-2xl font-bold text-green-600">{ stepSummary.themes }</div>
+							<div className="text-sm text-gray-600">{ __( 'Themes' ) }</div>
 						</div>
 						<div className="text-center p-3 bg-yellow-50 rounded-lg">
-							<div className="text-2xl font-bold text-yellow-600">{stepSummary.options}</div>
-							<div className="text-sm text-gray-600">{__('Settings')}</div>
+							<div className="text-2xl font-bold text-yellow-600">{ stepSummary.options }</div>
+							<div className="text-sm text-gray-600">{ __( 'Settings' ) }</div>
 						</div>
 						<div className="text-center p-3 bg-purple-50 rounded-lg">
-							<div className="text-2xl font-bold text-purple-600">{stepSummary.sql}</div>
-							<div className="text-sm text-gray-600">{__('SQL Queries')}</div>
+							<div className="text-2xl font-bold text-purple-600">{ stepSummary.sql }</div>
+							<div className="text-sm text-gray-600">{ __( 'SQL Queries' ) }</div>
 						</div>
 					</div>
 
-					{blueprintData.landingPage && (
+					{ blueprintData.landingPage && (
 						<div className="mt-4 p-3 bg-gray-50 rounded-lg">
-							<div className="text-sm font-medium text-gray-700">{__('Landing Page:')}</div>
-							<div className="text-sm text-gray-600">{blueprintData.landingPage}</div>
+							<div className="text-sm font-medium text-gray-700">{ __( 'Landing Page:' ) }</div>
+							<div className="text-sm text-gray-600">{ blueprintData.landingPage }</div>
 						</div>
-					)}
+					) }
 				</Card>
-			)}
+			) }
 
-			{/* Error Display */}
-			{error && (
-				<Notice status="error" isDismissible={false}>
-					{error}
+			{ /* Error Display */ }
+			{ error && (
+				<Notice status="error" isDismissible={ false }>
+					{ error }
 				</Notice>
-			)}
+			) }
 
-			{/* Import Button */}
-			{blueprintData && (
+			{ /* Import Button */ }
+			{ blueprintData && (
 				<Card className="p-6">
 					<div className="flex items-center justify-between">
 						<div>
 							<h3 className="text-lg font-medium text-gray-900 mb-2">
-								{__('Ready to Import')}
+								{ __( 'Ready to Import' ) }
 							</h3>
 							<p className="text-sm text-gray-600">
-								{__('This will install and configure all components in the blueprint.')}
+								{ __( 'This will install and configure all components in the blueprint.' ) }
 							</p>
 						</div>
-						<Button
-							variant="primary"
-							onClick={handleImport}
-							disabled={isImporting}
-						>
-							{isImporting ? (
+						<Button variant="primary" onClick={ handleImport } disabled={ isImporting }>
+							{ isImporting ? (
 								<div className="flex items-center gap-2">
 									<Spinner />
-									{__('Importing...')}
+									{ __( 'Importing...' ) }
 								</div>
 							) : (
-								__('Import Blueprint')
-							)}
+								__( 'Import Blueprint' )
+							) }
 						</Button>
 					</div>
 				</Card>
-			)}
+			) }
 
-			{/* Import Results */}
-			{importResults.length > 0 && (
+			{ /* Import Results */ }
+			{ importResults.length > 0 && (
 				<Card className="p-6">
-					<h3 className="text-lg font-medium text-gray-900 mb-4">
-						{__('Import Results')}
-					</h3>
-					
+					<h3 className="text-lg font-medium text-gray-900 mb-4">{ __( 'Import Results' ) }</h3>
+
 					<div className="space-y-2 max-h-60 overflow-y-auto">
-						{importResults.map((result, index) => (
+						{ importResults.map( ( result, index ) => (
 							<div
-								key={index}
-								className={`p-3 rounded-lg ${
+								key={ index }
+								className={ `p-3 rounded-lg ${
 									result.success
 										? 'bg-green-50 border border-green-200'
 										: 'bg-red-50 border border-red-200'
-								}`}
+								}` }
 							>
 								<div className="flex items-center gap-2">
 									<div
-										className={`w-2 h-2 rounded-full ${
+										className={ `w-2 h-2 rounded-full ${
 											result.success ? 'bg-green-500' : 'bg-red-500'
-										}`}
+										}` }
 									/>
 									<div className="flex-1">
-										<div className="text-sm font-medium text-gray-900">
-											{result.step}
-										</div>
-										<div className="text-sm text-gray-600">
-											{result.message}
-										</div>
+										<div className="text-sm font-medium text-gray-900">{ result.step }</div>
+										<div className="text-sm text-gray-600">{ result.message }</div>
 									</div>
 								</div>
 							</div>
-						))}
+						) ) }
 					</div>
 
-					{/* Summary */}
+					{ /* Summary */ }
 					<div className="mt-4 pt-4 border-t border-gray-200">
 						<div className="text-sm text-gray-600">
-							{__('Completed:')} {importResults.filter(r => r.success).length}/{importResults.length} {__('steps')}
+							{ __( 'Completed:' ) } { importResults.filter( ( r ) => r.success ).length }/
+							{ importResults.length } { __( 'steps' ) }
 						</div>
 					</div>
 				</Card>
-			)}
+			) }
 
-			{/* Information */}
+			{ /* Information */ }
 			<div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
 				<h3 className="text-lg font-medium text-blue-900 mb-2">
-					{__('About WooCommerce Blueprints')}
+					{ __( 'About WooCommerce Blueprints' ) }
 				</h3>
 				<ul className="text-blue-800 space-y-2">
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
-						<span>{__('Blueprints can install WordPress.org and premium WooCommerce plugins')}</span>
+						<span>
+							{ __( 'Blueprints can install WordPress.org and premium WooCommerce plugins' ) }
+						</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
-						<span>{__('Premium plugins require a valid GitHub token (configure in Tools tab)')}</span>
+						<span>
+							{ __( 'Premium plugins require a valid GitHub token (configure in Tools tab)' ) }
+						</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
-						<span>{__('Themes, WooCommerce settings, and database configurations will be applied')}</span>
+						<span>
+							{ __( 'Themes, WooCommerce settings, and database configurations will be applied' ) }
+						</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
-						<span>{__('Ensure WooCommerce is installed before importing blueprints')}</span>
+						<span>{ __( 'Ensure WooCommerce is installed before importing blueprints' ) }</span>
 					</li>
 				</ul>
 			</div>
 		</div>
 	);
-} 
+}

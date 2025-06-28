@@ -1,6 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json
 ---
-
 # IMAGE_ID is an env var that only macOS agents need.
 # Defining it at the root level propagates it too all agents, which can seem unnecessary but is a the same time convenient and DRY.
 env:
@@ -64,10 +63,10 @@ steps:
       - test-results/**/*.zip
     plugins: [$CI_TOOLKIT_PLUGIN, $NVM_PLUGIN]
     agents:
-      queue: "{{matrix}}"
+      queue: '{{matrix}}'
     env:
       # See https://playwright.dev/docs/ci#debugging-browser-launches
-      DEBUG: "pw:browser"
+      DEBUG: 'pw:browser'
     matrix:
       - mac
       #- windows
@@ -145,7 +144,7 @@ steps:
       - github_commit_status:
           context: Windows Dev Build
 
-  - label: ":rocket: Distribute Dev Builds"
+  - label: ':rocket: Distribute Dev Builds'
     command: |
       echo "--- :node: Downloading Binaries"
       buildkite-agent artifact download "*.app.zip" .
@@ -248,7 +247,7 @@ steps:
       - github_commit_status:
           context: Windows Release Build
 
-  - label: ":rocket: Publish Release Builds"
+  - label: ':rocket: Publish Release Builds'
     command: |
       echo "--- :node: Downloading Binaries"
       buildkite-agent artifact download "*.zip" .

@@ -40,7 +40,7 @@ const commands = [
 	{
 		command: `open "${ IMPORT_PAGE }"`,
 		description: `Opening the translation import page ${ IMPORT_PAGE } in the browser`,
-	}
+	},
 ];
 
 for ( const { command, description } of commands ) {

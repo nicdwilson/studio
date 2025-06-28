@@ -56,7 +56,7 @@
 	},
 	"overrides": [
 		{
-			"files": ["*.ts", "src/tests/**/*.{ts,tsx}"],
+			"files": [ "*.ts", "src/tests/**/*.{ts,tsx}" ],
 			"rules": {
 				"@typescript-eslint/no-require-imports": "off"
 			}

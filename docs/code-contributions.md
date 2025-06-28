@@ -38,6 +38,7 @@ This command starts the app in dev mode and opens it automatically, with the Chr
 As with any Electron app, the code is split into two processes:
 
 1. **Renderer Process** (reloads automatically):
+
    - All React components and UI code in `src/components/`, `src/modules/*/components/`
    - Hooks, stores, and utilities used by the UI (`src/hooks/`, `src/stores/`, etc.)
    - Any code that runs in the browser window context
@@ -49,6 +50,7 @@ As with any Electron app, the code is split into two processes:
    - PHP server management code
 
 When editing main process code, you can either:
+
 - Restart the app manually, or
 - Type `rs` in the terminal where you ran `npm start` to restart the server
 
@@ -76,26 +78,26 @@ The project follows a modular architecture with both global and feature-specific
 
 #### Global Directories
 
-| Directory | Description |
-|-----------|-------------|
-| `cli/`            | Root directory for CLI code |
+| Directory         | Description                                                                   |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `cli/`            | Root directory for CLI code                                                   |
 | `common/`         | Shared code between CLI and Studio (constants, types, utility functions, etc) |
-| `src/`            | Root directory for Studio code |
-| `src/components/` | Reusable UI components used across the application |
-| `src/hooks/`      | Global React hooks |
-| `src/lib/`        | Utility functions and helper libraries |
-| `src/stores/`     | Global state management (Redux stores) |
-| `src/api/`        | API interfaces and implementations |
+| `src/`            | Root directory for Studio code                                                |
+| `src/components/` | Reusable UI components used across the application                            |
+| `src/hooks/`      | Global React hooks                                                            |
+| `src/lib/`        | Utility functions and helper libraries                                        |
+| `src/stores/`     | Global state management (Redux stores)                                        |
+| `src/api/`        | API interfaces and implementations                                            |
 
 #### Important Entry Points
 
-| File | Description |
-|------|-------------|
-| `cli/index.ts`    | The entry point for the CLI bundle |
-| `scripts/`        | Scripts for building and testing the app |
-| `src/index.ts`    | The entry point for the main process |
+| File              | Description                                                                 |
+| ----------------- | --------------------------------------------------------------------------- |
+| `cli/index.ts`    | The entry point for the CLI bundle                                          |
+| `scripts/`        | Scripts for building and testing the app                                    |
+| `src/index.ts`    | The entry point for the main process                                        |
 | `src/renderer.ts` | The entry point for the "renderer," the code running in the Chromium window |
-| `vendor/wp-now`   | The modified `wp-now` source code |
+| `vendor/wp-now`   | The modified `wp-now` source code                                           |
 
 #### Feature Modules
 
@@ -188,6 +190,7 @@ After the build process completes, you can find the executables in the `out/` di
 ### Linux
 
 Linux support is currently in an experimental phase and comes with certain limitations:
+
 - For systems using Wayland, you may need to set the `--enable-features=UseOzonePlatform --ozone-platform=wayland`
   flag when running the application.
 - Some features may not work as expected on Linux due to platform-specific implementations.
@@ -204,6 +207,6 @@ See [Versioning and Updates](./versioning-and-updates.md) documentation.
 
 ## Design Docs
 
- - [Custom Domains and SSL](./design-docs/custom-domains-and-ssl.md)
- - [What's New modal](./design-docs/whats-new-modal.md)
- - [Sync](./design-docs/sync.md)
+- [Custom Domains and SSL](./design-docs/custom-domains-and-ssl.md)
+- [What's New modal](./design-docs/whats-new-modal.md)
+- [Sync](./design-docs/sync.md)

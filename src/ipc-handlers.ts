@@ -78,6 +78,7 @@ import type { WpCliResult } from 'src/lib/wp-cli-process';
 import os from 'os';
 import fetch from 'node-fetch';
 import { serializeForWordPress } from './lib/serialize-plugins';
+import { convertMySqlToSqlite } from './lib/sqlite-conversion';
 
 const TEMP_DIR = nodePath.join( app.getPath( 'temp' ), 'com.wordpress.studio' ) + nodePath.sep;
 if ( ! fs.existsSync( TEMP_DIR ) ) {
@@ -596,9 +597,7 @@ export async function showOpenFileDialog(
 	const { canceled, filePaths } = await dialog.showOpenDialog( parentWindow, {
 		title,
 		defaultPath: defaultDialogPath !== '' ? defaultDialogPath : DEFAULT_SITE_PATH,
-		properties: [
-			'openFile',
-		],
+		properties: [ 'openFile' ],
 		filters,
 	} );
 	if ( canceled ) {
@@ -1311,24 +1310,24 @@ export async function getFileContent( event: IpcMainInvokeEvent, filePath: strin
 		// Read file as UTF-8 with BOM handling
 		const content = fs.readFileSync( filePath, 'utf8' );
 		// Remove BOM if present
-		return content.replace(/^\uFEFF/, '');
+		return content.replace( /^\uFEFF/, '' );
 	} catch ( error ) {
 		// Fallback: read as buffer and try different encodings
 		const buffer = fs.readFileSync( filePath );
-		
+
 		// Try different encodings
-		const encodings = ['utf8', 'utf16le', 'latin1', 'ascii'];
-		
+		const encodings = [ 'utf8', 'utf16le', 'latin1', 'ascii' ];
+
 		for ( const encoding of encodings ) {
 			try {
 				const content = buffer.toString( encoding as BufferEncoding );
 				// Remove BOM if present
-				return content.replace(/^\uFEFF/, '');
+				return content.replace( /^\uFEFF/, '' );
 			} catch {
 				continue;
 			}
 		}
-		
+
 		throw new Error( `Unable to read file with any supported encoding: ${ filePath }` );
 	}
 }
@@ -1474,7 +1473,7 @@ export async function installPluginFromPrivateRepo(
 	}
 ): Promise< { success: boolean; error?: string } > {
 	console.log( `[Wizard Hat] Starting installation of ${ pluginName } from ${ repositoryUrl }` );
-	
+
 	const server = SiteServer.get( siteId );
 	if ( ! server ) {
 		console.error( `[Wizard Hat] Site not found: ${ siteId }` );
@@ -1494,174 +1493,210 @@ export async function installPluginFromPrivateRepo(
 		);
 		let isAllPlugins = false;
 		let zipDownloadUrl = '';
-		
-		if (allPluginsMatch || repositoryUrl.includes('woocommerce/all-plugins')) {
+
+		if ( allPluginsMatch || repositoryUrl.includes( 'woocommerce/all-plugins' ) ) {
 			isAllPlugins = true;
-			console.log(`[Wizard Hat] Detected all-plugins repo, using GitHub API to find download URL`);
-			
+			console.log(
+				`[Wizard Hat] Detected all-plugins repo, using GitHub API to find download URL`
+			);
+
 			// Use GitHub API to traverse the repository and find the correct download URL
 			const pluginSlug = pluginName;
 
 			try {
 				// 1. Get the latest commit SHA for all-plugins
-				const commitsResponse = await fetch('https://api.github.com/repos/woocommerce/all-plugins/commits', {
-					headers: {
-						'Authorization': `token ${githubToken}`,
-						'Accept': 'application/vnd.github.v3+json',
-						'User-Agent': 'Wizard Hat Toolkit'
+				const commitsResponse = await fetch(
+					'https://api.github.com/repos/woocommerce/all-plugins/commits',
+					{
+						headers: {
+							Authorization: `token ${ githubToken }`,
+							Accept: 'application/vnd.github.v3+json',
+							'User-Agent': 'Wizard Hat Toolkit',
+						},
 					}
-				});
-				
-				if (!commitsResponse.ok) {
-					throw new Error(`Failed to fetch commits: ${commitsResponse.status} ${commitsResponse.statusText}`);
+				);
+
+				if ( ! commitsResponse.ok ) {
+					throw new Error(
+						`Failed to fetch commits: ${ commitsResponse.status } ${ commitsResponse.statusText }`
+					);
 				}
-				
+
 				const commits = await commitsResponse.json();
-				const treeSha = commits[0].commit.tree.sha;
-				console.log(`[Wizard Hat] Latest commit SHA: ${treeSha}`);
+				const treeSha = commits[ 0 ].commit.tree.sha;
+				console.log( `[Wizard Hat] Latest commit SHA: ${ treeSha }` );
 
 				// 2. Get the tree for the latest commit
-				const treeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${treeSha}`, {
-					headers: {
-						'Authorization': `token ${githubToken}`,
-						'Accept': 'application/vnd.github.v3+json',
-						'User-Agent': 'Wizard Hat Toolkit'
+				const treeResponse = await fetch(
+					`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${ treeSha }`,
+					{
+						headers: {
+							Authorization: `token ${ githubToken }`,
+							Accept: 'application/vnd.github.v3+json',
+							'User-Agent': 'Wizard Hat Toolkit',
+						},
 					}
-				});
-				
-				if (!treeResponse.ok) {
-					throw new Error(`Failed to fetch tree: ${treeResponse.status} ${treeResponse.statusText}`);
+				);
+
+				if ( ! treeResponse.ok ) {
+					throw new Error(
+						`Failed to fetch tree: ${ treeResponse.status } ${ treeResponse.statusText }`
+					);
 				}
-				
+
 				const tree = await treeResponse.json();
 
 				// 3. Find the product-packages directory SHA
-				const productPackages = tree.tree.find((item: any) => item.path === 'product-packages');
-				if (!productPackages) {
-					throw new Error('product-packages directory not found in repository');
+				const productPackages = tree.tree.find( ( item: any ) => item.path === 'product-packages' );
+				if ( ! productPackages ) {
+					throw new Error( 'product-packages directory not found in repository' );
 				}
-				console.log(`[Wizard Hat] Found product-packages directory`);
+				console.log( `[Wizard Hat] Found product-packages directory` );
 
 				// 4. Get the tree for product-packages
-				const packagesTreeResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${productPackages.sha}`, {
-					headers: {
-						'Authorization': `token ${githubToken}`,
-						'Accept': 'application/vnd.github.v3+json',
-						'User-Agent': 'Wizard Hat Toolkit'
+				const packagesTreeResponse = await fetch(
+					`https://api.github.com/repos/woocommerce/all-plugins/git/trees/${ productPackages.sha }`,
+					{
+						headers: {
+							Authorization: `token ${ githubToken }`,
+							Accept: 'application/vnd.github.v3+json',
+							'User-Agent': 'Wizard Hat Toolkit',
+						},
 					}
-				});
-				
-				if (!packagesTreeResponse.ok) {
-					throw new Error(`Failed to fetch packages tree: ${packagesTreeResponse.status} ${packagesTreeResponse.statusText}`);
+				);
+
+				if ( ! packagesTreeResponse.ok ) {
+					throw new Error(
+						`Failed to fetch packages tree: ${ packagesTreeResponse.status } ${ packagesTreeResponse.statusText }`
+					);
 				}
-				
+
 				const packagesTree = await packagesTreeResponse.json();
 
 				// 5. Find the plugin directory
-				const pluginDir = packagesTree.tree.find((item: any) => item.path === pluginSlug);
-				if (!pluginDir) {
-					throw new Error(`Plugin '${pluginSlug}' not found in product-packages directory`);
+				const pluginDir = packagesTree.tree.find( ( item: any ) => item.path === pluginSlug );
+				if ( ! pluginDir ) {
+					throw new Error( `Plugin '${ pluginSlug }' not found in product-packages directory` );
 				}
-				console.log(`[Wizard Hat] Found plugin directory: ${pluginSlug}`);
+				console.log( `[Wizard Hat] Found plugin directory: ${ pluginSlug }` );
 
 				// 6. Get the contents of the plugin directory
-				const contentsResponse = await fetch(`https://api.github.com/repos/woocommerce/all-plugins/contents/product-packages/${pluginSlug}`, {
-					headers: {
-						'Authorization': `token ${githubToken}`,
-						'Accept': 'application/vnd.github.v3+json',
-						'User-Agent': 'Wizard Hat Toolkit'
+				const contentsResponse = await fetch(
+					`https://api.github.com/repos/woocommerce/all-plugins/contents/product-packages/${ pluginSlug }`,
+					{
+						headers: {
+							Authorization: `token ${ githubToken }`,
+							Accept: 'application/vnd.github.v3+json',
+							'User-Agent': 'Wizard Hat Toolkit',
+						},
 					}
-				});
-				
-				if (!contentsResponse.ok) {
-					throw new Error(`Failed to fetch contents: ${contentsResponse.status} ${contentsResponse.statusText}`);
+				);
+
+				if ( ! contentsResponse.ok ) {
+					throw new Error(
+						`Failed to fetch contents: ${ contentsResponse.status } ${ contentsResponse.statusText }`
+					);
 				}
-				
+
 				const contents = await contentsResponse.json();
 
 				// 7. Find the zip file
-				const zipFile = contents.find((file: any) => file.name === `${pluginSlug}.zip`);
-				if (!zipFile) {
-					throw new Error(`Zip file '${pluginSlug}.zip' not found for plugin`);
+				const zipFile = contents.find( ( file: any ) => file.name === `${ pluginSlug }.zip` );
+				if ( ! zipFile ) {
+					throw new Error( `Zip file '${ pluginSlug }.zip' not found for plugin` );
 				}
-				
+
 				zipDownloadUrl = zipFile.download_url;
-				console.log(`[Wizard Hat] Found download URL: ${zipDownloadUrl}`);
-				console.log(`[Wizard Hat] Zip file details:`, {
+				console.log( `[Wizard Hat] Found download URL: ${ zipDownloadUrl }` );
+				console.log( `[Wizard Hat] Zip file details:`, {
 					name: zipFile.name,
 					size: zipFile.size,
 					download_url: zipDownloadUrl,
-					path: zipFile.path
-				});
-				
+					path: zipFile.path,
+				} );
+
 				// Test the download URL with a HEAD request
 				try {
-					const headResponse = await fetch(zipDownloadUrl, {
+					const headResponse = await fetch( zipDownloadUrl, {
 						method: 'HEAD',
 						headers: {
-							'Authorization': `token ${githubToken}`,
-							'User-Agent': 'Wizard Hat Toolkit'
-						}
-					});
-					
-					console.log(`[Wizard Hat] HEAD request result:`, {
+							Authorization: `token ${ githubToken }`,
+							'User-Agent': 'Wizard Hat Toolkit',
+						},
+					} );
+
+					console.log( `[Wizard Hat] HEAD request result:`, {
 						status: headResponse.status,
 						statusText: headResponse.statusText,
-						contentLength: headResponse.headers.get('content-length'),
-						contentType: headResponse.headers.get('content-type')
-					});
-					
-					if (!headResponse.ok) {
-						throw new Error(`HEAD request failed: ${headResponse.status} ${headResponse.statusText}`);
+						contentLength: headResponse.headers.get( 'content-length' ),
+						contentType: headResponse.headers.get( 'content-type' ),
+					} );
+
+					if ( ! headResponse.ok ) {
+						throw new Error(
+							`HEAD request failed: ${ headResponse.status } ${ headResponse.statusText }`
+						);
 					}
-				} catch (headError) {
-					console.warn(`[Wizard Hat] HEAD request failed:`, headError);
+				} catch ( headError ) {
+					console.warn( `[Wizard Hat] HEAD request failed:`, headError );
 				}
-			} catch (apiError) {
-				console.error(`[Wizard Hat] GitHub API error:`, apiError);
-				throw new Error(`Failed to find plugin download URL: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+			} catch ( apiError ) {
+				console.error( `[Wizard Hat] GitHub API error:`, apiError );
+				throw new Error(
+					`Failed to find plugin download URL: ${
+						apiError instanceof Error ? apiError.message : String( apiError )
+					}`
+				);
 			}
 		}
 
-		if (isAllPlugins && zipDownloadUrl) {
+		if ( isAllPlugins && zipDownloadUrl ) {
 			// Download the ZIP file directly with authentication
-			const { download } = await import('src/lib/download');
-			const headers = githubToken ? { 
-				Authorization: `token ${githubToken}`,
-				'User-Agent': 'Wizard Hat Toolkit'
-			} : undefined;
-			
-			console.log(`[Wizard Hat] Downloading ZIP from: ${zipDownloadUrl}`);
-			console.log(`[Wizard Hat] Download headers:`, headers ? { ...headers, Authorization: '***' } : 'None');
-			console.log(`[Wizard Hat] Target ZIP path: ${zipPath}`);
-			
+			const { download } = await import( 'src/lib/download' );
+			const headers = githubToken
+				? {
+						Authorization: `token ${ githubToken }`,
+						'User-Agent': 'Wizard Hat Toolkit',
+				  }
+				: undefined;
+
+			console.log( `[Wizard Hat] Downloading ZIP from: ${ zipDownloadUrl }` );
+			console.log(
+				`[Wizard Hat] Download headers:`,
+				headers ? { ...headers, Authorization: '***' } : 'None'
+			);
+			console.log( `[Wizard Hat] Target ZIP path: ${ zipPath }` );
+
 			try {
-				await download(zipDownloadUrl, zipPath, false, pluginName, headers);
-				console.log(`[Wizard Hat] Download completed successfully`);
-				
+				await download( zipDownloadUrl, zipPath, false, pluginName, headers );
+				console.log( `[Wizard Hat] Download completed successfully` );
+
 				// Verify the downloaded file
-				const downloadStats = await fsPromises.stat(zipPath);
-				console.log(`[Wizard Hat] Downloaded file size: ${downloadStats.size} bytes`);
-				
-				if (downloadStats.size === 0) {
-					throw new Error('Downloaded file is empty (0 bytes)');
+				const downloadStats = await fsPromises.stat( zipPath );
+				console.log( `[Wizard Hat] Downloaded file size: ${ downloadStats.size } bytes` );
+
+				if ( downloadStats.size === 0 ) {
+					throw new Error( 'Downloaded file is empty (0 bytes)' );
 				}
-				
+
 				// Check if it's actually a zip file
-				const fileBuffer = await fsPromises.readFile(zipPath);
-				const isZipFile = fileBuffer.slice(0, 4).toString('hex') === '504b0304';
-				console.log(`[Wizard Hat] File is valid ZIP: ${isZipFile}`);
-				
-				if (!isZipFile) {
+				const fileBuffer = await fsPromises.readFile( zipPath );
+				const isZipFile = fileBuffer.slice( 0, 4 ).toString( 'hex' ) === '504b0304';
+				console.log( `[Wizard Hat] File is valid ZIP: ${ isZipFile }` );
+
+				if ( ! isZipFile ) {
 					// Read the first few bytes to see what we actually got
-					const fileContent = fileBuffer.slice(0, 200).toString('utf8');
-					console.log(`[Wizard Hat] File content preview:`, fileContent);
-					throw new Error('Downloaded file is not a valid ZIP file');
+					const fileContent = fileBuffer.slice( 0, 200 ).toString( 'utf8' );
+					console.log( `[Wizard Hat] File content preview:`, fileContent );
+					throw new Error( 'Downloaded file is not a valid ZIP file' );
 				}
-				
-			} catch (downloadError) {
-				console.error(`[Wizard Hat] Download failed:`, downloadError);
-				throw new Error(`Failed to download plugin: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`);
+			} catch ( downloadError ) {
+				console.error( `[Wizard Hat] Download failed:`, downloadError );
+				throw new Error(
+					`Failed to download plugin: ${
+						downloadError instanceof Error ? downloadError.message : String( downloadError )
+					}`
+				);
 			}
 		} else {
 			// --- EXISTING LOGIC: Clone the repository ---
@@ -1672,7 +1707,10 @@ export async function installPluginFromPrivateRepo(
 			console.log( `[Wizard Hat] Repository cloned successfully` );
 
 			// Check if the directory was created and has content
-			const tempDirExists = await fsPromises.access( tempDir ).then( () => true ).catch( () => false );
+			const tempDirExists = await fsPromises
+				.access( tempDir )
+				.then( () => true )
+				.catch( () => false );
 			if ( ! tempDirExists ) {
 				throw new Error( 'Failed to create temporary directory' );
 			}
@@ -1686,111 +1724,120 @@ export async function installPluginFromPrivateRepo(
 		}
 
 		// Check if ZIP file was created
-		const zipExists = await fsPromises.access( zipPath ).then( () => true ).catch( () => false );
+		const zipExists = await fsPromises
+			.access( zipPath )
+			.then( () => true )
+			.catch( () => false );
 		if ( ! zipExists ) {
 			throw new Error( 'Failed to create ZIP file' );
 		}
-		
+
 		const zipStats = await fsPromises.stat( zipPath );
 		console.log( `[Wizard Hat] ZIP file size: ${ zipStats.size } bytes` );
 
 		// Debug: Inspect ZIP file contents
 		try {
 			console.log( `[Wizard Hat] Inspecting ZIP file contents...` );
-			const { exec } = await import('child_process');
-			const { promisify } = await import('util');
-			const execAsync = promisify(exec);
-			
+			const { exec } = await import( 'child_process' );
+			const { promisify } = await import( 'util' );
+			const execAsync = promisify( exec );
+
 			// List contents of the ZIP file
-			const { stdout: zipContents } = await execAsync(`unzip -l "${zipPath}"`);
-			console.log( `[Wizard Hat] ZIP file contents:\n${zipContents}` );
-			
+			const { stdout: zipContents } = await execAsync( `unzip -l "${ zipPath }"` );
+			console.log( `[Wizard Hat] ZIP file contents:\n${ zipContents }` );
+
 			// Check if the ZIP contains the expected plugin structure
-			const hasPluginFile = zipContents.includes(`${pluginName}.php`);
-			const hasReadmeFile = zipContents.includes('readme.txt');
-			console.log( `[Wizard Hat] ZIP contains ${pluginName}.php: ${hasPluginFile}` );
-			console.log( `[Wizard Hat] ZIP contains readme.txt: ${hasReadmeFile}` );
-			
-			if (!hasPluginFile) {
-				console.warn( `[Wizard Hat] Warning: ZIP file does not contain expected plugin file ${pluginName}.php` );
-				
+			const hasPluginFile = zipContents.includes( `${ pluginName }.php` );
+			const hasReadmeFile = zipContents.includes( 'readme.txt' );
+			console.log( `[Wizard Hat] ZIP contains ${ pluginName }.php: ${ hasPluginFile }` );
+			console.log( `[Wizard Hat] ZIP contains readme.txt: ${ hasReadmeFile }` );
+
+			if ( ! hasPluginFile ) {
+				console.warn(
+					`[Wizard Hat] Warning: ZIP file does not contain expected plugin file ${ pluginName }.php`
+				);
+
 				// Check if the plugin files are in a subdirectory
-				const lines = zipContents.split('\n');
-				const pluginFileInSubdir = lines.find(line => line.includes(`${pluginName}.php`));
-				
-				if (pluginFileInSubdir) {
-					console.log( `[Wizard Hat] Found plugin file in subdirectory: ${pluginFileInSubdir}` );
-					
+				const lines = zipContents.split( '\n' );
+				const pluginFileInSubdir = lines.find( ( line ) => line.includes( `${ pluginName }.php` ) );
+
+				if ( pluginFileInSubdir ) {
+					console.log( `[Wizard Hat] Found plugin file in subdirectory: ${ pluginFileInSubdir }` );
+
 					// Extract and repackage the zip file
 					console.log( `[Wizard Hat] Extracting and repackaging ZIP file...` );
-					
+
 					// Create a temporary extraction directory
-					const extractDir = `${tempDir}-extract`;
-					await fsPromises.mkdir(extractDir, { recursive: true });
-					
+					const extractDir = `${ tempDir }-extract`;
+					await fsPromises.mkdir( extractDir, { recursive: true } );
+
 					// Extract the zip file
-					await execAsync(`unzip -q "${zipPath}" -d "${extractDir}"`);
-					
+					await execAsync( `unzip -q "${ zipPath }" -d "${ extractDir }"` );
+
 					// List the extracted contents
-					const extractedContents = await fsPromises.readdir(extractDir);
+					const extractedContents = await fsPromises.readdir( extractDir );
 					console.log( `[Wizard Hat] Extracted contents:`, extractedContents );
-					
+
 					// Find the plugin directory (should be the only directory)
-					const pluginDir = extractedContents.find(item => {
+					const pluginDir = extractedContents.find( ( item ) => {
 						try {
-							return fs.statSync(nodePath.join(extractDir, item)).isDirectory();
+							return fs.statSync( nodePath.join( extractDir, item ) ).isDirectory();
 						} catch {
 							return false;
 						}
-					});
-					
-					if (pluginDir) {
-						console.log( `[Wizard Hat] Found plugin directory: ${pluginDir}` );
-						
+					} );
+
+					if ( pluginDir ) {
+						console.log( `[Wizard Hat] Found plugin directory: ${ pluginDir }` );
+
 						// Create a new zip file with the plugin files at the root
-						const newZipPath = `${tempDir}-fixed.zip`;
-						await execAsync(`cd "${nodePath.join(extractDir, pluginDir)}" && zip -r "${newZipPath}" .`);
-						
+						const newZipPath = `${ tempDir }-fixed.zip`;
+						await execAsync(
+							`cd "${ nodePath.join( extractDir, pluginDir ) }" && zip -r "${ newZipPath }" .`
+						);
+
 						// Replace the original zip file
-						await fsPromises.unlink(zipPath);
-						await fsPromises.rename(newZipPath, zipPath);
-						
-						console.log( `[Wizard Hat] Repackaged ZIP file created: ${zipPath}` );
-						
+						await fsPromises.unlink( zipPath );
+						await fsPromises.rename( newZipPath, zipPath );
+
+						console.log( `[Wizard Hat] Repackaged ZIP file created: ${ zipPath }` );
+
 						// Verify the new zip contents
-						const { stdout: newZipContents } = await execAsync(`unzip -l "${zipPath}"`);
-						console.log( `[Wizard Hat] New ZIP file contents:\n${newZipContents}` );
+						const { stdout: newZipContents } = await execAsync( `unzip -l "${ zipPath }"` );
+						console.log( `[Wizard Hat] New ZIP file contents:\n${ newZipContents }` );
 					} else {
 						console.warn( `[Wizard Hat] Could not find plugin directory in extracted contents` );
 					}
-					
+
 					// Clean up extraction directory
-					await fsPromises.rm(extractDir, { recursive: true, force: true });
+					await fsPromises.rm( extractDir, { recursive: true, force: true } );
 				}
 			}
-		} catch (debugError) {
+		} catch ( debugError ) {
 			console.warn( `[Wizard Hat] Could not inspect ZIP contents:`, debugError );
 		}
 
 		// Install the ZIP file via WP-CLI
 		console.log( `[Wizard Hat] Installing via WP-CLI: plugin install ${ zipPath } --activate` );
-		
+
 		// Copy the zip file to the WordPress directory since WP-CLI runs in PHP-WASM
 		// and can't access the temp directory directly
-		const wpZipPath = nodePath.join(server.details.path, `${pluginName}.zip`);
-		console.log( `[Wizard Hat] Copying zip file to WordPress directory: ${wpZipPath}` );
-		await fsPromises.copyFile(zipPath, wpZipPath);
-		
+		const wpZipPath = nodePath.join( server.details.path, `${ pluginName }.zip` );
+		console.log( `[Wizard Hat] Copying zip file to WordPress directory: ${ wpZipPath }` );
+		await fsPromises.copyFile( zipPath, wpZipPath );
+
 		// Use relative path for WP-CLI
-		const relativeZipPath = `${pluginName}.zip`;
-		console.log( `[Wizard Hat] Using relative path for WP-CLI: ${relativeZipPath}` );
-		
-		const result = await server.executeWpCliCommand( `plugin install ${ relativeZipPath } --activate` );
+		const relativeZipPath = `${ pluginName }.zip`;
+		console.log( `[Wizard Hat] Using relative path for WP-CLI: ${ relativeZipPath }` );
+
+		const result = await server.executeWpCliCommand(
+			`plugin install ${ relativeZipPath } --activate`
+		);
 
 		console.log( `[Wizard Hat] WP-CLI result:`, {
 			exitCode: result.exitCode,
 			stdout: result.stdout,
-			stderr: result.stderr
+			stderr: result.stderr,
 		} );
 
 		if ( result.exitCode !== 0 ) {
@@ -1809,11 +1856,11 @@ export async function installPluginFromPrivateRepo(
 		try {
 			await fsPromises.rm( tempDir, { recursive: true, force: true } );
 			await fsPromises.unlink( zipPath ).catch( () => {} ); // Ignore if file doesn't exist
-			
+
 			// Clean up the copied zip file in WordPress directory
-			const wpZipPath = nodePath.join(server.details.path, `${pluginName}.zip`);
+			const wpZipPath = nodePath.join( server.details.path, `${ pluginName }.zip` );
 			await fsPromises.unlink( wpZipPath ).catch( () => {} ); // Ignore if file doesn't exist
-			
+
 			console.log( `[Wizard Hat] Cleanup completed` );
 		} catch ( cleanupError ) {
 			console.error( '[Wizard Hat] Cleanup error:', cleanupError );
@@ -1826,16 +1873,16 @@ export async function validateGitHubToken(
 	token: string
 ): Promise< { valid: boolean; user?: string; error?: string } > {
 	try {
-		if ( !token || token.length === 0 ) {
+		if ( ! token || token.length === 0 ) {
 			return { valid: false, error: 'Token is empty' };
 		}
 
 		// Test the GitHub API to validate the token
 		const response = await fetch( 'https://api.github.com/user', {
 			headers: {
-				'Authorization': `token ${ token }`,
-				'Accept': 'application/vnd.github.v3+json'
-			}
+				Authorization: `token ${ token }`,
+				Accept: 'application/vnd.github.v3+json',
+			},
 		} );
 
 		if ( response.ok ) {
@@ -1844,7 +1891,10 @@ export async function validateGitHubToken(
 			return { valid: true, user: userData.login };
 		} else {
 			console.error( 'GitHub token validation failed:', response.status, response.statusText );
-			return { valid: false, error: `Token validation failed: ${ response.status } ${ response.statusText }` };
+			return {
+				valid: false,
+				error: `Token validation failed: ${ response.status } ${ response.statusText }`,
+			};
 		}
 	} catch ( error ) {
 		console.error( 'GitHub token validation error:', error );
@@ -1855,45 +1905,52 @@ export async function validateGitHubToken(
 export async function getAvailablePremiumPlugins(
 	_event: IpcMainInvokeEvent,
 	githubToken: string
-): Promise< { success: boolean; plugins?: Array<{ name: string; label: string }>; error?: string } > {
+): Promise< {
+	success: boolean;
+	plugins?: Array< { name: string; label: string } >;
+	error?: string;
+} > {
 	try {
 		// Validate token first
-		const tokenValidation = await validateGitHubToken(_event, githubToken);
-		if (!tokenValidation.valid) {
+		const tokenValidation = await validateGitHubToken( _event, githubToken );
+		if ( ! tokenValidation.valid ) {
 			return { success: false, error: tokenValidation.error || 'Invalid GitHub token' };
 		}
 
 		// Fetch plugins from the repository
-		const response = await fetch('https://api.github.com/repos/woocommerce/all-plugins/contents', {
+		const response = await fetch( 'https://api.github.com/repos/woocommerce/all-plugins/contents', {
 			headers: {
-				'Authorization': `token ${githubToken}`,
-				'Accept': 'application/vnd.github.v3+json',
-				'User-Agent': 'WooCommerce-Studio'
-			}
-		});
+				Authorization: `token ${ githubToken }`,
+				Accept: 'application/vnd.github.v3+json',
+				'User-Agent': 'WooCommerce-Studio',
+			},
+		} );
 
-		if (!response.ok) {
-			return { success: false, error: `GitHub API error: ${response.status} ${response.statusText}` };
+		if ( ! response.ok ) {
+			return {
+				success: false,
+				error: `GitHub API error: ${ response.status } ${ response.statusText }`,
+			};
 		}
 
-		const contents = await response.json() as any[];
-		const plugins: Array<{ name: string; label: string }> = [];
+		const contents = ( await response.json() ) as any[];
+		const plugins: Array< { name: string; label: string } > = [];
 
-		for (const item of contents) {
-			if (item.type === 'dir' && item.name.endsWith('.zip')) {
-				const pluginName = item.name.replace('.zip', '');
+		for ( const item of contents ) {
+			if ( item.type === 'dir' && item.name.endsWith( '.zip' ) ) {
+				const pluginName = item.name.replace( '.zip', '' );
 				// Convert plugin name to a more readable label
 				const label = pluginName
-					.split('-')
-					.map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-					.join(' ');
-				plugins.push({ name: pluginName, label });
+					.split( '-' )
+					.map( ( word: string ) => word.charAt( 0 ).toUpperCase() + word.slice( 1 ) )
+					.join( ' ' );
+				plugins.push( { name: pluginName, label } );
 			}
 		}
 
 		return { success: true, plugins };
-	} catch (error) {
-		console.error('Error fetching premium plugins:', error);
+	} catch ( error ) {
+		console.error( 'Error fetching premium plugins:', error );
 		return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
 	}
 }
@@ -1909,72 +1966,75 @@ export async function importWooCommerceBlueprint(
 		blueprintPath: string;
 		githubToken?: string;
 	}
-): Promise< { success: boolean; error?: string; results?: Array<{ step: string; success: boolean; message: string }> } > {
+): Promise< {
+	success: boolean;
+	error?: string;
+	results?: Array< { step: string; success: boolean; message: string } >;
+} > {
 	try {
-		const site = SiteServer.get(siteId);
-		if (!site) {
+		const site = SiteServer.get( siteId );
+		if ( ! site ) {
 			return { success: false, error: 'Site not found' };
 		}
 
 		// Ensure site is running
-		if (!site.details.running) {
+		if ( ! site.details.running ) {
 			await site.start();
 		}
 
 		// Read and parse the blueprint file
-		const blueprintContent = await fsPromises.readFile(blueprintPath, 'utf8');
-		const blueprint = JSON.parse(blueprintContent);
+		const blueprintContent = await fsPromises.readFile( blueprintPath, 'utf8' );
+		const blueprint = JSON.parse( blueprintContent );
 
-		if (!blueprint.steps || !Array.isArray(blueprint.steps)) {
+		if ( ! blueprint.steps || ! Array.isArray( blueprint.steps ) ) {
 			return { success: false, error: 'Invalid blueprint format: missing or invalid steps array' };
 		}
 
-		const results: Array<{ step: string; success: boolean; message: string }> = [];
+		const results: Array< { step: string; success: boolean; message: string } > = [];
 
 		// Process each step in the blueprint
-		for (const step of blueprint.steps) {
+		for ( const step of blueprint.steps ) {
 			try {
-				switch (step.step) {
+				switch ( step.step ) {
 					case 'installPlugin':
-						await processInstallPluginStep(_event, site, step, githubToken, results);
+						await processInstallPluginStep( _event, site, step, githubToken, results );
 						break;
 					case 'installTheme':
-						await processInstallThemeStep(_event, site, step, results);
+						await processInstallThemeStep( _event, site, step, results );
 						break;
 					case 'setSiteOptions':
-						await processSetSiteOptionsStep(_event, site, step, results);
+						await processSetSiteOptionsStep( _event, site, step, results );
 						break;
 					case 'runSql':
-						await processRunSqlStep(_event, site, step, results);
+						await processRunSqlStep( _event, site, step, results );
 						break;
 					default:
-						results.push({
+						results.push( {
 							step: step.step,
 							success: false,
-							message: `Unsupported step type: ${step.step}`
-						});
+							message: `Unsupported step type: ${ step.step }`,
+						} );
 				}
-			} catch (error) {
-				results.push({
+			} catch ( error ) {
+				results.push( {
 					step: step.step,
 					success: false,
-					message: error instanceof Error ? error.message : 'Unknown error'
-				});
+					message: error instanceof Error ? error.message : 'Unknown error',
+				} );
 			}
 		}
 
-		const allSuccessful = results.every(result => result.success);
-		return { 
-			success: allSuccessful, 
+		const allSuccessful = results.every( ( result ) => result.success );
+		return {
+			success: allSuccessful,
 			results,
-			error: allSuccessful ? undefined : 'Some steps failed during import'
+			error: allSuccessful ? undefined : 'Some steps failed during import',
 		};
-
-	} catch (error) {
-		console.error('Error importing blueprint:', error);
-		return { 
-			success: false, 
-			error: error instanceof Error ? error.message : 'Unknown error' 
+	} catch ( error ) {
+		console.error( 'Error importing blueprint:', error );
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : 'Unknown error',
 		};
 	}
 }
@@ -1984,68 +2044,68 @@ async function processInstallPluginStep(
 	site: SiteServer,
 	step: any,
 	githubToken: string | undefined,
-	results: Array<{ step: string; success: boolean; message: string }>
+	results: Array< { step: string; success: boolean; message: string } >
 ) {
 	const pluginData = step.pluginData;
 	const options = step.options || {};
 
-	if (pluginData.resource === 'wordpress.org/plugins') {
+	if ( pluginData.resource === 'wordpress.org/plugins' ) {
 		// WordPress.org plugin
-		const result = await executeWPCLiInline(event, {
+		const result = await executeWPCLiInline( event, {
 			siteId: site.details.id,
-			args: `plugin install ${pluginData.slug} --activate=${options.activate ? 'yes' : 'no'}`
-		});
+			args: `plugin install ${ pluginData.slug } --activate=${ options.activate ? 'yes' : 'no' }`,
+		} );
 
-		if (result.exitCode === 0) {
-			results.push({
+		if ( result.exitCode === 0 ) {
+			results.push( {
 				step: 'installPlugin',
 				success: true,
-				message: `Successfully installed WordPress.org plugin: ${pluginData.slug}`
-			});
+				message: `Successfully installed WordPress.org plugin: ${ pluginData.slug }`,
+			} );
 		} else {
-			results.push({
+			results.push( {
 				step: 'installPlugin',
 				success: false,
-				message: `Failed to install WordPress.org plugin ${pluginData.slug}: ${result.stderr}`
-			});
+				message: `Failed to install WordPress.org plugin ${ pluginData.slug }: ${ result.stderr }`,
+			} );
 		}
-	} else if (pluginData.resource === 'self/plugins') {
+	} else if ( pluginData.resource === 'self/plugins' ) {
 		// Premium plugin from WooCommerce repository
-		if (!githubToken) {
-			results.push({
+		if ( ! githubToken ) {
+			results.push( {
 				step: 'installPlugin',
 				success: false,
-				message: `GitHub token required for premium plugin: ${pluginData.slug}`
-			});
+				message: `GitHub token required for premium plugin: ${ pluginData.slug }`,
+			} );
 			return;
 		}
 
-		const installResult = await installPluginFromPrivateRepo(event, {
+		const installResult = await installPluginFromPrivateRepo( event, {
 			siteId: site.details.id,
 			repositoryUrl: 'https://github.com/woocommerce/all-plugins',
 			githubToken,
-			pluginName: pluginData.slug
-		});
+			pluginName: pluginData.slug,
+		} );
 
-		if (installResult.success) {
-			results.push({
+		if ( installResult.success ) {
+			results.push( {
 				step: 'installPlugin',
 				success: true,
-				message: `Successfully installed premium plugin: ${pluginData.slug}`
-			});
+				message: `Successfully installed premium plugin: ${ pluginData.slug }`,
+			} );
 		} else {
-			results.push({
+			results.push( {
 				step: 'installPlugin',
 				success: false,
-				message: `Failed to install premium plugin ${pluginData.slug}: ${installResult.error}`
-			});
+				message: `Failed to install premium plugin ${ pluginData.slug }: ${ installResult.error }`,
+			} );
 		}
 	} else {
-		results.push({
+		results.push( {
 			step: 'installPlugin',
 			success: false,
-			message: `Unsupported plugin resource type: ${pluginData.resource}`
-		});
+			message: `Unsupported plugin resource type: ${ pluginData.resource }`,
+		} );
 	}
 }
 
@@ -2053,36 +2113,36 @@ async function processInstallThemeStep(
 	event: IpcMainInvokeEvent,
 	site: SiteServer,
 	step: any,
-	results: Array<{ step: string; success: boolean; message: string }>
+	results: Array< { step: string; success: boolean; message: string } >
 ) {
 	const themeData = step.themeData;
 	const options = step.options || {};
 
-	if (themeData.resource === 'wordpress.org/themes') {
-		const result = await executeWPCLiInline(event, {
+	if ( themeData.resource === 'wordpress.org/themes' ) {
+		const result = await executeWPCLiInline( event, {
 			siteId: site.details.id,
-			args: `theme install ${themeData.slug} --activate=${options.activate ? 'yes' : 'no'}`
-		});
+			args: `theme install ${ themeData.slug } --activate=${ options.activate ? 'yes' : 'no' }`,
+		} );
 
-		if (result.exitCode === 0) {
-			results.push({
+		if ( result.exitCode === 0 ) {
+			results.push( {
 				step: 'installTheme',
 				success: true,
-				message: `Successfully installed theme: ${themeData.slug}`
-			});
+				message: `Successfully installed theme: ${ themeData.slug }`,
+			} );
 		} else {
-			results.push({
+			results.push( {
 				step: 'installTheme',
 				success: false,
-				message: `Failed to install theme ${themeData.slug}: ${result.stderr}`
-			});
+				message: `Failed to install theme ${ themeData.slug }: ${ result.stderr }`,
+			} );
 		}
 	} else {
-		results.push({
+		results.push( {
 			step: 'installTheme',
 			success: false,
-			message: `Unsupported theme resource type: ${themeData.resource}`
-		});
+			message: `Unsupported theme resource type: ${ themeData.resource }`,
+		} );
 	}
 }
 
@@ -2090,71 +2150,75 @@ async function processSetSiteOptionsStep(
 	event: IpcMainInvokeEvent,
 	site: SiteServer,
 	step: any,
-	results: Array<{ step: string; success: boolean; message: string }>
+	results: Array< { step: string; success: boolean; message: string } >
 ) {
 	const options = step.options;
 	let successCount = 0;
 	let totalCount = 0;
 
-	for (const [optionName, optionValue] of Object.entries(options)) {
+	for ( const [ optionName, optionValue ] of Object.entries( options ) ) {
 		totalCount++;
 		try {
 			let result;
-			
-			if (Array.isArray(optionValue)) {
+
+			if ( Array.isArray( optionValue ) ) {
 				// For arrays (including empty arrays), use --format=json to let WordPress handle serialization
-				const jsonValue = JSON.stringify(optionValue);
-				console.log(`[Wizard Hat] Setting option ${optionName} with JSON value: ${jsonValue}`);
-				
-				result = await executeWPCLiInline(event, {
+				const jsonValue = JSON.stringify( optionValue );
+				console.log(
+					`[Wizard Hat] Setting option ${ optionName } with JSON value: ${ jsonValue }`
+				);
+
+				result = await executeWPCLiInline( event, {
 					siteId: site.details.id,
-					args: `option set ${optionName} '${jsonValue}' --format=json`
-				});
-			} else if (typeof optionValue === 'object' && optionValue !== null) {
+					args: `option set ${ optionName } '${ jsonValue }' --format=json`,
+				} );
+			} else if ( typeof optionValue === 'object' && optionValue !== null ) {
 				// For objects (but not arrays), use --format=json to let WordPress handle serialization
-				const jsonValue = JSON.stringify(optionValue);
-				console.log(`[Wizard Hat] Setting option ${optionName} with JSON value: ${jsonValue}`);
-				
-				result = await executeWPCLiInline(event, {
+				const jsonValue = JSON.stringify( optionValue );
+				console.log(
+					`[Wizard Hat] Setting option ${ optionName } with JSON value: ${ jsonValue }`
+				);
+
+				result = await executeWPCLiInline( event, {
 					siteId: site.details.id,
-					args: `option set ${optionName} '${jsonValue}' --format=json`
-				});
+					args: `option set ${ optionName } '${ jsonValue }' --format=json`,
+				} );
 			} else {
 				// For primitive values, escape and use regular option set
-				const valueString = String(optionValue);
-				const escapedValue = valueString.replace(/'/g, "'\"'\"'");
-				
-				console.log(`[Wizard Hat] Setting option ${optionName} with value: ${valueString}`);
-				
-				result = await executeWPCLiInline(event, {
+				const valueString = String( optionValue );
+				const escapedValue = valueString.replace( /'/g, "'\"'\"'" );
+
+				console.log( `[Wizard Hat] Setting option ${ optionName } with value: ${ valueString }` );
+
+				result = await executeWPCLiInline( event, {
 					siteId: site.details.id,
-					args: `option set ${optionName} '${escapedValue}'`
-				});
+					args: `option set ${ optionName } '${ escapedValue }'`,
+				} );
 			}
 
-			if (result.exitCode === 0) {
+			if ( result.exitCode === 0 ) {
 				successCount++;
-				console.log(`[Wizard Hat] Successfully set option ${optionName}`);
+				console.log( `[Wizard Hat] Successfully set option ${ optionName }` );
 			} else {
-				console.error(`[Wizard Hat] Failed to set option ${optionName}: ${result.stderr}`);
+				console.error( `[Wizard Hat] Failed to set option ${ optionName }: ${ result.stderr }` );
 			}
-		} catch (error) {
-			console.error(`[Wizard Hat] Error setting option ${optionName}:`, error);
+		} catch ( error ) {
+			console.error( `[Wizard Hat] Error setting option ${ optionName }:`, error );
 		}
 	}
 
-	if (successCount === totalCount) {
-		results.push({
+	if ( successCount === totalCount ) {
+		results.push( {
 			step: 'setSiteOptions',
 			success: true,
-			message: `Successfully set ${successCount} site options`
-		});
+			message: `Successfully set ${ successCount } site options`,
+		} );
 	} else {
-		results.push({
+		results.push( {
 			step: 'setSiteOptions',
 			success: false,
-			message: `Set ${successCount}/${totalCount} site options successfully`
-		});
+			message: `Set ${ successCount }/${ totalCount } site options successfully`,
+		} );
 	}
 }
 
@@ -2162,30 +2226,64 @@ async function processRunSqlStep(
 	event: IpcMainInvokeEvent,
 	site: SiteServer,
 	step: any,
-	results: Array<{ step: string; success: boolean; message: string }>
+	results: Array< { step: string; success: boolean; message: string } >
 ) {
 	const sql = step.sql;
 
-	if (sql.resource === 'literal' && sql.contents) {
-		// Escape the SQL for shell command
-		const escapedSql = sql.contents.replace(/'/g, "'\"'\"'");
-		
-		const result = await executeWPCLiInline(event, {
-			siteId: site.details.id,
-			args: `db query '${escapedSql}'`
-		});
-
-		if (result.exitCode === 0) {
-				results.push({
-					step: 'runSql',
-					success: true,
-					message: `Successfully executed SQL: ${sql.name || 'unnamed query'}`
+	if ( sql.resource === 'literal' && sql.contents ) {
+		try {
+			// Convert MySQL-specific SQL to SQLite-compatible SQL
+			let sqliteCompatibleSql = convertMySqlToSqlite( sql.contents );
+			
+			console.log(`[Wizard Hat] Original SQL: ${sql.contents}`);
+			console.log(`[Wizard Hat] SQLite-compatible SQL: ${sqliteCompatibleSql}`);
+			
+			// Instead of escaping for shell, write SQL to a temporary file and execute it
+			const tempSqlFile = nodePath.join(TEMP_DIR, `blueprint-sql-${Date.now()}.sql`);
+			
+			try {
+				// Ensure temp directory exists
+				await fs.promises.mkdir(TEMP_DIR, { recursive: true });
+				
+				// Write SQL to temporary file
+				await fs.promises.writeFile(tempSqlFile, sqliteCompatibleSql, 'utf8');
+				
+				console.log(`[Wizard Hat] SQL written to temporary file: ${tempSqlFile}`);
+				
+				// Execute SQL from file
+				const result = await executeWPCLiInline(event, {
+					siteId: site.details.id,
+					args: `db query --file='${tempSqlFile}'`
 				});
-		} else {
+
+				if (result.exitCode === 0) {
+					results.push({
+						step: 'runSql',
+						success: true,
+						message: `Successfully executed SQL: ${sql.name || 'unnamed query'}`
+					});
+				} else {
+					console.error(`[Wizard Hat] SQL execution failed:`, result.stderr);
+					results.push({
+						step: 'runSql',
+						success: false,
+						message: `Failed to execute SQL ${sql.name || 'unnamed query'}: ${result.stderr}`
+					});
+				}
+			} finally {
+				// Clean up temporary file
+				try {
+					await fs.promises.unlink(tempSqlFile);
+				} catch (cleanupError) {
+					console.warn(`[Wizard Hat] Failed to cleanup temp SQL file:`, cleanupError);
+				}
+			}
+		} catch (error) {
+			console.error(`[Wizard Hat] Error processing SQL:`, error);
 			results.push({
 				step: 'runSql',
 				success: false,
-				message: `Failed to execute SQL ${sql.name || 'unnamed query'}: ${result.stderr}`
+				message: `Error processing SQL ${sql.name || 'unnamed query'}: ${error instanceof Error ? error.message : 'Unknown error'}`
 			});
 		}
 	} else {

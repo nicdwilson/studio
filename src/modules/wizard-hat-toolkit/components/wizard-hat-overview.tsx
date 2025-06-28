@@ -1,15 +1,7 @@
 import { __ } from '@wordpress/i18n';
 import { useI18n } from '@wordpress/react-i18n';
 import { Card, Button, Icon } from '@wordpress/components';
-import { 
-	cog, 
-	archive, 
-	edit, 
-	page, 
-	download, 
-	help, 
-	info 
-} from '@wordpress/icons';
+import { cog, archive, edit, page, download, help, info } from '@wordpress/icons';
 import { ButtonsSection, ButtonsSectionProps } from 'src/components/buttons-section';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { getIpcApi } from 'src/lib/get-ipc-api';
@@ -18,152 +10,154 @@ import { useState, useEffect } from 'react';
 export function WizardHatOverview() {
 	const { __ } = useI18n();
 	const { selectedSite } = useSiteDetails();
-	const [isHPOS, setIsHPOS] = useState<boolean | null>(null);
-	const [isLoadingHPOS, setIsLoadingHPOS] = useState(false);
+	const [ isHPOS, setIsHPOS ] = useState< boolean | null >( null );
+	const [ isLoadingHPOS, setIsLoadingHPOS ] = useState( false );
 
 	// Detect HPOS status
-	useEffect(() => {
+	useEffect( () => {
 		const detectHPOS = async () => {
-			if (!selectedSite?.running) {
-				setIsHPOS(null);
+			if ( ! selectedSite?.running ) {
+				setIsHPOS( null );
 				return;
 			}
 
-			setIsLoadingHPOS(true);
+			setIsLoadingHPOS( true );
 			try {
-				const result = await getIpcApi().executeWPCLiInline({
+				const result = await getIpcApi().executeWPCLiInline( {
 					siteId: selectedSite.id,
-					args: 'option get woocommerce_custom_orders_table_enabled'
-				});
+					args: 'option get woocommerce_custom_orders_table_enabled',
+				} );
 
 				// HPOS is enabled if the option returns 'yes'
-				setIsHPOS(result.stdout?.trim() === 'yes');
-			} catch (error) {
-				console.error('Error detecting HPOS status:', error);
+				setIsHPOS( result.stdout?.trim() === 'yes' );
+			} catch ( error ) {
+				console.error( 'Error detecting HPOS status:', error );
 				// Default to false if we can't detect
-				setIsHPOS(false);
+				setIsHPOS( false );
 			} finally {
-				setIsLoadingHPOS(false);
+				setIsLoadingHPOS( false );
 			}
 		};
 
 		detectHPOS();
-	}, [selectedSite?.id, selectedSite?.running]);
+	}, [ selectedSite?.id, selectedSite?.running ] );
 
-	if (!selectedSite) {
+	if ( ! selectedSite ) {
 		return (
 			<div className="space-y-8">
 				<div className="max-w-3xl px-8">
 					<h2 className="text-xl font-semibold text-gray-900 mb-4">
-						{__('Wizard Hat Toolkit')}
+						{ __( 'Wizard Hat Toolkit' ) }
 					</h2>
 					<p className="text-gray-600 mb-6">
-						{__('Please select a site to use the Wizard Hat Toolkit.')}
+						{ __( 'Please select a site to use the Wizard Hat Toolkit.' ) }
 					</p>
 				</div>
 			</div>
 		);
 	}
 
-	const handleWooCommerceClick = (url: string) => async () => {
-		if (!selectedSite.running) {
+	const handleWooCommerceClick = ( url: string ) => async () => {
+		if ( ! selectedSite.running ) {
 			// Start the server if it's not running
 			// Note: This would need to be implemented based on your site management logic
 		}
-		getIpcApi().openSiteURL(selectedSite.id, url);
+		getIpcApi().openSiteURL( selectedSite.id, url );
 	};
 
-	const wooCommerceButtons: ButtonsSectionProps['buttonsArray'] = [
+	const wooCommerceButtons: ButtonsSectionProps[ 'buttonsArray' ] = [
 		{
-			label: __('General Settings'),
+			label: __( 'General Settings' ),
 			icon: cog,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings' ),
 		},
 		{
-			label: __('Products'),
+			label: __( 'Products' ),
 			icon: archive,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=products'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=products' ),
 		},
 		{
-			label: __('Payments'),
+			label: __( 'Payments' ),
 			icon: edit,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=checkout'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=checkout' ),
 		},
 		{
-			label: __('Shipping'),
+			label: __( 'Shipping' ),
 			icon: page,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=shipping'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=shipping' ),
 		},
 		{
-			label: __('Taxes'),
+			label: __( 'Taxes' ),
 			icon: download,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=tax'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=tax' ),
 		},
 		{
-			label: __('Emails'),
+			label: __( 'Emails' ),
 			icon: help,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=email'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=email' ),
 		},
 		{
-			label: __('Accounts & Privacy'),
+			label: __( 'Accounts & Privacy' ),
 			icon: info,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=account'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=account' ),
 		},
 		{
-			label: __('Advanced'),
+			label: __( 'Advanced' ),
 			icon: cog,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=advanced'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=advanced' ),
 		},
 		{
-			label: __('Advanced Features'),
+			label: __( 'Advanced Features' ),
 			icon: archive,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=advanced&section=features'),
+			onClick: handleWooCommerceClick(
+				'/wp-admin/admin.php?page=wc-settings&tab=advanced&section=features'
+			),
 		},
 		{
-			label: __('Subscriptions'),
+			label: __( 'Subscriptions' ),
 			icon: edit,
-			onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-settings&tab=subscriptions'),
+			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=subscriptions' ),
 		},
 	];
 
 	// Create WooCommerce Data buttons based on HPOS status
-	const getWooCommerceDataButtons = (): ButtonsSectionProps['buttonsArray'] => {
+	const getWooCommerceDataButtons = (): ButtonsSectionProps[ 'buttonsArray' ] => {
 		const baseButtons = [
 			{
-				label: __('Products'),
+				label: __( 'Products' ),
 				icon: archive,
-				onClick: handleWooCommerceClick('/wp-admin/edit.php?post_type=product'),
+				onClick: handleWooCommerceClick( '/wp-admin/edit.php?post_type=product' ),
 			},
 			{
-				label: __('Analytics'),
+				label: __( 'Analytics' ),
 				icon: page,
-				onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-admin'),
+				onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-admin' ),
 			},
 		];
 
 		// Add orders button based on HPOS status
-		if (isHPOS === true) {
+		if ( isHPOS === true ) {
 			// HPOS enabled - use the new orders page
-			baseButtons.push({
-				label: __('Orders'),
+			baseButtons.push( {
+				label: __( 'Orders' ),
 				icon: edit,
-				onClick: handleWooCommerceClick('/wp-admin/admin.php?page=wc-orders'),
-			});
-		} else if (isHPOS === false) {
+				onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-orders' ),
+			} );
+		} else if ( isHPOS === false ) {
 			// HPOS disabled - use the traditional orders page
-			baseButtons.push({
-				label: __('Orders'),
+			baseButtons.push( {
+				label: __( 'Orders' ),
 				icon: edit,
-				onClick: handleWooCommerceClick('/wp-admin/edit.php?post_type=shop_order'),
-			});
+				onClick: handleWooCommerceClick( '/wp-admin/edit.php?post_type=shop_order' ),
+			} );
 		}
 
 		// Add subscriptions button (may not be available on all sites)
-		baseButtons.push({
-			label: __('Subscriptions'),
+		baseButtons.push( {
+			label: __( 'Subscriptions' ),
 			icon: download,
-			onClick: handleWooCommerceClick('/wp-admin/edit.php?post_type=shop_subscription'),
-		});
+			onClick: handleWooCommerceClick( '/wp-admin/edit.php?post_type=shop_subscription' ),
+		} );
 
 		return baseButtons;
 	};
@@ -171,94 +165,96 @@ export function WizardHatOverview() {
 	return (
 		<div className="space-y-8">
 			<div className="max-w-3xl px-8">
-				<h2 className="text-xl font-semibold text-gray-900 mb-4">
-					{__('Wizard Hat Toolkit')}
-				</h2>
+				<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Wizard Hat Toolkit' ) }</h2>
 				<p className="text-gray-600 mb-6">
-					{__('A collection of essential tools for Woo Happiness troubleshooting and testing. This toolkit provides utilities for tunneling, shop configuration, plugin management, and more.')}
+					{ __(
+						'A collection of essential tools for Woo Happiness troubleshooting and testing. This toolkit provides utilities for tunneling, shop configuration, plugin management, and more.'
+					) }
 				</p>
 			</div>
 
-			{/* WooCommerce Settings */}
+			{ /* WooCommerce Settings */ }
 			<div className="px-8">
-				<ButtonsSection 
-					buttonsArray={wooCommerceButtons} 
-					title={__('WooCommerce Settings')} 
+				<ButtonsSection
+					buttonsArray={ wooCommerceButtons }
+					title={ __( 'WooCommerce Settings' ) }
 				/>
 			</div>
 
-			{/* WooCommerce Data */}
+			{ /* WooCommerce Data */ }
 			<div className="px-8">
-				<ButtonsSection 
-					buttonsArray={getWooCommerceDataButtons()} 
-					title={__('WooCommerce Data')} 
+				<ButtonsSection
+					buttonsArray={ getWooCommerceDataButtons() }
+					title={ __( 'WooCommerce Data' ) }
 				/>
 			</div>
 
-			{/* Site Information */}
+			{ /* Site Information */ }
 			<Card className="p-6">
-				<h3 className="text-lg font-medium text-gray-900 mb-4">
-					{__('Current Site')}
-				</h3>
+				<h3 className="text-lg font-medium text-gray-900 mb-4">{ __( 'Current Site' ) }</h3>
 				<div className="space-y-3">
 					<div className="flex justify-between">
-						<span className="text-gray-600">{__('Site Name')}:</span>
-						<span className="font-medium">{selectedSite.name}</span>
+						<span className="text-gray-600">{ __( 'Site Name' ) }:</span>
+						<span className="font-medium">{ selectedSite.name }</span>
 					</div>
 					<div className="flex justify-between">
-						<span className="text-gray-600">{__('Path')}:</span>
-						<span className="font-medium">{selectedSite.path}</span>
+						<span className="text-gray-600">{ __( 'Path' ) }:</span>
+						<span className="font-medium">{ selectedSite.path }</span>
 					</div>
 					<div className="flex justify-between">
-						<span className="text-gray-600">{__('Status')}:</span>
-						<span className={`font-medium ${selectedSite.running ? 'text-green-600' : 'text-red-600'}`}>
-							{selectedSite.running ? __('Running') : __('Stopped')}
+						<span className="text-gray-600">{ __( 'Status' ) }:</span>
+						<span
+							className={ `font-medium ${
+								selectedSite.running ? 'text-green-600' : 'text-red-600'
+							}` }
+						>
+							{ selectedSite.running ? __( 'Running' ) : __( 'Stopped' ) }
 						</span>
 					</div>
-					{selectedSite.running && (
+					{ selectedSite.running && (
 						<div className="flex justify-between">
-							<span className="text-gray-600">{__('URL')}:</span>
-							<span className="font-medium">{selectedSite.url}</span>
+							<span className="text-gray-600">{ __( 'URL' ) }:</span>
+							<span className="font-medium">{ selectedSite.url }</span>
 						</div>
-					)}
+					) }
 				</div>
-				{selectedSite.running && (
+				{ selectedSite.running && (
 					<div className="mt-4 pt-4 border-t border-gray-200">
 						<Button
 							variant="secondary"
-							onClick={handleWooCommerceClick('/wp-admin/admin.php?page=wc-status')}
+							onClick={ handleWooCommerceClick( '/wp-admin/admin.php?page=wc-status' ) }
 							className="w-full"
 						>
-							{__('View System Status Report')}
+							{ __( 'View System Status Report' ) }
 						</Button>
 					</div>
-				)}
+				) }
 			</Card>
 
-			{/* Getting Started */}
+			{ /* Getting Started */ }
 			<div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-				<h3 className="text-lg font-medium text-blue-900 mb-2">
-					{__('Getting Started')}
-				</h3>
+				<h3 className="text-lg font-medium text-blue-900 mb-2">{ __( 'Getting Started' ) }</h3>
 				<ol className="text-blue-800 space-y-2">
 					<li className="flex items-start">
 						<span className="font-medium mr-2">1.</span>
-						<span>{__('Set up Jurassic Tube for external access and payment testing')}</span>
+						<span>{ __( 'Set up Jurassic Tube for external access and payment testing' ) }</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">2.</span>
-						<span>{__('Configure your shop settings for the appropriate locale')}</span>
+						<span>{ __( 'Configure your shop settings for the appropriate locale' ) }</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">3.</span>
-						<span>{__('Install necessary WooCommerce plugins for your development needs')}</span>
+						<span>
+							{ __( 'Install necessary WooCommerce plugins for your development needs' ) }
+						</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">4.</span>
-						<span>{__('Use the developer tools for testing and debugging')}</span>
+						<span>{ __( 'Use the developer tools for testing and debugging' ) }</span>
 					</li>
 				</ol>
 			</div>
 		</div>
 	);
-} 
+}
