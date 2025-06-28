@@ -77,6 +77,7 @@ import type { SyncSite } from 'src/hooks/use-fetch-wpcom-sites/types';
 import type { WpCliResult } from 'src/lib/wp-cli-process';
 import os from 'os';
 import fetch from 'node-fetch';
+import { serializeForWordPress } from './lib/serialize-plugins';
 
 const TEMP_DIR = nodePath.join( app.getPath( 'temp' ), 'com.wordpress.studio' ) + nodePath.sep;
 if ( ! fs.existsSync( TEMP_DIR ) ) {
@@ -2098,27 +2099,47 @@ async function processSetSiteOptionsStep(
 	for (const [optionName, optionValue] of Object.entries(options)) {
 		totalCount++;
 		try {
-			// Handle different value types
-			let valueString: string;
-			if (typeof optionValue === 'object') {
-				valueString = JSON.stringify(optionValue);
-			} else {
-				valueString = String(optionValue);
-			}
-
-			// Escape the value for shell command
-			const escapedValue = valueString.replace(/'/g, "'\"'\"'");
+			let result;
 			
-			const result = await executeWPCLiInline(event, {
-				siteId: site.details.id,
-				args: `option set ${optionName} '${escapedValue}'`
-			});
+			if (Array.isArray(optionValue)) {
+				// For arrays (including empty arrays), use --format=json to let WordPress handle serialization
+				const jsonValue = JSON.stringify(optionValue);
+				console.log(`[Wizard Hat] Setting option ${optionName} with JSON value: ${jsonValue}`);
+				
+				result = await executeWPCLiInline(event, {
+					siteId: site.details.id,
+					args: `option set ${optionName} '${jsonValue}' --format=json`
+				});
+			} else if (typeof optionValue === 'object' && optionValue !== null) {
+				// For objects (but not arrays), use --format=json to let WordPress handle serialization
+				const jsonValue = JSON.stringify(optionValue);
+				console.log(`[Wizard Hat] Setting option ${optionName} with JSON value: ${jsonValue}`);
+				
+				result = await executeWPCLiInline(event, {
+					siteId: site.details.id,
+					args: `option set ${optionName} '${jsonValue}' --format=json`
+				});
+			} else {
+				// For primitive values, escape and use regular option set
+				const valueString = String(optionValue);
+				const escapedValue = valueString.replace(/'/g, "'\"'\"'");
+				
+				console.log(`[Wizard Hat] Setting option ${optionName} with value: ${valueString}`);
+				
+				result = await executeWPCLiInline(event, {
+					siteId: site.details.id,
+					args: `option set ${optionName} '${escapedValue}'`
+				});
+			}
 
 			if (result.exitCode === 0) {
 				successCount++;
+				console.log(`[Wizard Hat] Successfully set option ${optionName}`);
+			} else {
+				console.error(`[Wizard Hat] Failed to set option ${optionName}: ${result.stderr}`);
 			}
 		} catch (error) {
-			console.error(`Error setting option ${optionName}:`, error);
+			console.error(`[Wizard Hat] Error setting option ${optionName}:`, error);
 		}
 	}
 

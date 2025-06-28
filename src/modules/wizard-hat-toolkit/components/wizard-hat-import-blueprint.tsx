@@ -95,22 +95,11 @@ export function WizardHatImportBlueprint() {
 		try {
 			const fileContent = await getIpcApi().getFileContent(filePath);
 			
-			// Try different encoding approaches to handle BOM and encoding issues
-			let fileContentString: string;
+			// The getFileContent function already handles encoding and BOM removal
+			// and returns a string directly
+			let fileContentString: string = fileContent;
 			
-			// First try UTF-8
-			try {
-				fileContentString = fileContent.toString('utf8');
-			} catch {
-				// Fallback to UTF-16 or other encodings
-				try {
-					fileContentString = fileContent.toString('utf16le');
-				} catch {
-					fileContentString = fileContent.toString('latin1');
-				}
-			}
-			
-			// Remove BOM (Byte Order Mark) if present
+			// Remove BOM (Byte Order Mark) if present (extra safety)
 			fileContentString = fileContentString.replace(/^\uFEFF/, '');
 			
 			// Check for common JSON issues
