@@ -2238,22 +2238,21 @@ async function processRunSqlStep(
 			console.log(`[Wizard Hat] Original SQL: ${sql.contents}`);
 			console.log(`[Wizard Hat] SQLite-compatible SQL: ${sqliteCompatibleSql}`);
 			
-			// Instead of escaping for shell, write SQL to a temporary file and execute it
-			const tempSqlFile = nodePath.join(TEMP_DIR, `blueprint-sql-${Date.now()}.sql`);
+			// Create a temporary SQL file in the site directory
+			const tempSqlFile = nodePath.join(site.details.path, `blueprint-sql-${Date.now()}.sql`);
 			
 			try {
-				// Ensure temp directory exists
-				await fs.promises.mkdir(TEMP_DIR, { recursive: true });
-				
 				// Write SQL to temporary file
 				await fs.promises.writeFile(tempSqlFile, sqliteCompatibleSql, 'utf8');
 				
 				console.log(`[Wizard Hat] SQL written to temporary file: ${tempSqlFile}`);
 				
-				// Execute SQL from file
+				// Execute SQL using Studio's native SQLite import command
+				// This is the same approach used by Studio's database import functionality
 				const result = await executeWPCLiInline(event, {
 					siteId: site.details.id,
-					args: `db query --file='${tempSqlFile}'`
+					args: `sqlite import ${nodePath.basename(tempSqlFile)} --require=/tmp/sqlite-command/command.php`,
+					skipPluginsAndThemes: true
 				});
 
 				if (result.exitCode === 0) {

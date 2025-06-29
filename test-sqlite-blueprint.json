@@ -1,0 +1,29 @@
+{
+  "landingPage": "test-sqlite",
+  "steps": [
+    {
+      "step": "runSql",
+      "sql": {
+        "resource": "literal",
+        "name": "test_sqlite_insert",
+        "contents": "INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('test_sqlite_option', 'test_value_from_blueprint', 'yes')"
+      }
+    },
+    {
+      "step": "runSql",
+      "sql": {
+        "resource": "literal",
+        "name": "test_sqlite_select",
+        "contents": "SELECT option_name, option_value FROM wp_options WHERE option_name = 'test_sqlite_option'"
+      }
+    },
+    {
+      "step": "runSql",
+      "sql": {
+        "resource": "literal",
+        "name": "test_sqlite_count",
+        "contents": "SELECT COUNT(*) as total_options FROM wp_options"
+      }
+    }
+  ]
+} 
