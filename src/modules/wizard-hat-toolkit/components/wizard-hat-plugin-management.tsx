@@ -96,8 +96,10 @@ export function WizardHatPluginManagement() {
 	const isLoading = selectedSite?.id ? loadingServer[ selectedSite.id ] : false;
 
 	const validateToken = async ( token: string ) => {
+
 		try {
 			if ( token.length === 0 ) {
+	
 				setTokenValid( false );
 				return;
 			}
@@ -105,9 +107,11 @@ export function WizardHatPluginManagement() {
 			const result = await getIpcApi().validateGitHubToken( token );
 
 			if ( result.valid ) {
+
 				setTokenValid( true );
 				await loadPremiumPlugins( token );
 			} else {
+
 				setTokenValid( false );
 				setAllPremiumPlugins( [] );
 			}
@@ -119,9 +123,11 @@ export function WizardHatPluginManagement() {
 	};
 
 	const loadPremiumPlugins = async ( token: string ) => {
+
 		setLoadingPremiumPlugins( true );
 		try {
 			const result = await getIpcApi().getAvailablePremiumPlugins( token );
+
 
 			if ( result.success && result.plugins ) {
 				const premiumOptions: PluginOption[] = result.plugins.map( ( plugin ) => ( {
@@ -131,8 +137,10 @@ export function WizardHatPluginManagement() {
 					repository: 'https://github.com/woocommerce/all-plugins',
 				} ) );
 
+
 				setAllPremiumPlugins( premiumOptions );
 			} else {
+
 				setAllPremiumPlugins( [] );
 			}
 		} catch ( error ) {
@@ -172,13 +180,15 @@ export function WizardHatPluginManagement() {
 	}, [ searchTerm, allPremiumPlugins, selectedPlugins ] );
 
 	const handleSearchChange = useCallback( ( value: string ) => {
+
+		
 		setSearchTerm( value );
 		if ( value.length >= 3 ) {
 			setShowSearchResults( true );
 		} else {
 			setShowSearchResults( false );
 		}
-	}, [] );
+	}, [allPremiumPlugins.length, tokenValid, loadingPremiumPlugins] );
 
 	const addPremiumPluginFromSearch = ( pluginValue: string ) => {
 		if ( ! selectedPlugins.includes( pluginValue ) ) {
@@ -342,6 +352,8 @@ export function WizardHatPluginManagement() {
 						{ __( 'Configure your GitHub token in the Tools tab to install marketplace plugins.' ) }
 					</p>
 				) }
+				
+
 			</Card>
 
 			{ /* Marketplace Section */ }

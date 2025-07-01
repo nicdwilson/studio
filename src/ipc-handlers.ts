@@ -1910,6 +1910,7 @@ export async function getAvailablePremiumPlugins(
 	plugins?: Array< { name: string; label: string } >;
 	error?: string;
 } > {
+
 	try {
 		// Validate token first
 		const tokenValidation = await validateGitHubToken( _event, githubToken );
@@ -1918,13 +1919,15 @@ export async function getAvailablePremiumPlugins(
 		}
 
 		// Fetch plugins from the repository
-		const response = await fetch( 'https://api.github.com/repos/woocommerce/all-plugins/contents', {
+
+		const response = await fetch( 'https://api.github.com/repos/woocommerce/all-plugins/contents/product-packages', {
 			headers: {
 				Authorization: `token ${ githubToken }`,
 				Accept: 'application/vnd.github.v3+json',
 				'User-Agent': 'WooCommerce-Studio',
 			},
 		} );
+
 
 		if ( ! response.ok ) {
 			return {
@@ -1934,11 +1937,12 @@ export async function getAvailablePremiumPlugins(
 		}
 
 		const contents = ( await response.json() ) as any[];
+		
 		const plugins: Array< { name: string; label: string } > = [];
 
 		for ( const item of contents ) {
-			if ( item.type === 'dir' && item.name.endsWith( '.zip' ) ) {
-				const pluginName = item.name.replace( '.zip', '' );
+			if ( item.type === 'dir' && item.name !== 'woocommerce-shipstation' ) {
+				const pluginName = item.name;
 				// Convert plugin name to a more readable label
 				const label = pluginName
 					.split( '-' )
@@ -1948,6 +1952,8 @@ export async function getAvailablePremiumPlugins(
 			}
 		}
 
+
+		
 		return { success: true, plugins };
 	} catch ( error ) {
 		console.error( 'Error fetching premium plugins:', error );
