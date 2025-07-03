@@ -9,7 +9,8 @@ export type TabName =
 	| 'assistant'
 	| 'import-export'
 	| 'previews'
-	| 'wizard-hat-toolkit';
+	| 'wizard-hat-toolkit'
+	| 'mysql-credentials';
 type Tab = React.ComponentProps< typeof TabPanel >[ 'tabs' ][ number ] & {
 	name: TabName;
 };
@@ -55,6 +56,12 @@ function useTabs() {
 				name: 'wizard-hat-toolkit',
 				title: __( 'WooCommerce' ),
 				className: 'components-tab-panel__tabs--wizard-hat ltr:pl-4 rtl:pr-4',
+			},
+			{
+				order: 6.5,
+				name: 'mysql-credentials',
+				title: __( 'MySQL' ),
+				className: 'components-tab-panel__tabs--mysql ltr:pl-4 rtl:pr-4',
 			},
 			{
 				order: 7,

@@ -128,6 +128,11 @@ const api: IpcApi = {
 	getAvailablePremiumPlugins: ( token ) => ipcRendererInvoke( 'getAvailablePremiumPlugins', token ),
 	importWooCommerceBlueprint: ( options ) =>
 		ipcRendererInvoke( 'importWooCommerceBlueprint', options ),
+	// MySQL Credentials
+	saveMySQLCredentials: ( credentials ) => ipcRendererInvoke( 'saveMySQLCredentials', credentials ),
+	getMySQLCredentials: () => ipcRendererInvoke( 'getMySQLCredentials' ),
+	clearMySQLCredentials: () => ipcRendererInvoke( 'clearMySQLCredentials' ),
+	testMySQLConnection: ( credentials ) => ipcRendererInvoke( 'testMySQLConnection', credentials ),
 };
 
 contextBridge.exposeInMainWorld( 'ipcApi', api );

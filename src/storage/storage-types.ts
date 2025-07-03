@@ -32,6 +32,12 @@ export interface UserData {
 	preferredTerminal?: SupportedTerminal;
 	preferredEditor?: SupportedEditor;
 	newSites?: NewSiteDetails[];
+	mysqlCredentials?: {
+		host: string;
+		port: string;
+		username: string;
+		password: string;
+	};
 }
 
 export interface PersistedUserData extends Omit< UserData, 'sites' > {

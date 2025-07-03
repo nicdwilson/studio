@@ -2299,3 +2299,94 @@ async function processRunSqlStep(
 		});
 	}
 }
+
+// MySQL Credentials Management
+export async function saveMySQLCredentials(
+	_event: IpcMainInvokeEvent,
+	credentials: {
+		host: string;
+		port: string;
+		username: string;
+		password: string;
+	}
+): Promise< void > {
+	try {
+		await lockAppdata();
+		const userData = await loadUserData();
+		userData.mysqlCredentials = credentials;
+		await saveUserData( userData );
+	} finally {
+		await unlockAppdata();
+	}
+}
+
+export async function getMySQLCredentials(
+	_event: IpcMainInvokeEvent
+): Promise< {
+	host: string;
+	port: string;
+	username: string;
+	password: string;
+} | null > {
+	try {
+		const userData = await loadUserData();
+		return userData.mysqlCredentials || null;
+	} catch ( error ) {
+		console.error( 'Error loading MySQL credentials:', error );
+		return null;
+	}
+}
+
+export async function clearMySQLCredentials( _event: IpcMainInvokeEvent ): Promise< void > {
+	try {
+		await lockAppdata();
+		const userData = await loadUserData();
+		delete userData.mysqlCredentials;
+		await saveUserData( userData );
+	} finally {
+		await unlockAppdata();
+	}
+}
+
+export async function testMySQLConnection(
+	_event: IpcMainInvokeEvent,
+	credentials: {
+		host: string;
+		port: string;
+		username: string;
+		password: string;
+	}
+): Promise< { success: boolean; message: string } > {
+	try {
+		// For now, we'll just validate the credentials format
+		// In the future, this could actually test the connection
+		if ( ! credentials.host || ! credentials.port || ! credentials.username ) {
+			return {
+				success: false,
+				message: __( 'Please fill in all required fields (host, port, username).' ),
+			};
+		}
+
+		// Validate port is a number
+		const portNum = parseInt( credentials.port, 10 );
+		if ( isNaN( portNum ) || portNum < 1 || portNum > 65535 ) {
+			return {
+				success: false,
+				message: __( 'Port must be a valid number between 1 and 65535.' ),
+			};
+		}
+
+		// For now, return success if format is valid
+		// TODO: Implement actual MySQL connection test
+		return {
+			success: true,
+			message: __( 'Credentials format is valid. Connection test will be implemented in the next phase.' ),
+		};
+	} catch ( error ) {
+		console.error( 'Error testing MySQL connection:', error );
+		return {
+			success: false,
+			message: __( 'Connection test failed. Please check your credentials.' ),
+		};
+	}
+}

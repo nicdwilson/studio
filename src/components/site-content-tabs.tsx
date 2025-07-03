@@ -14,6 +14,7 @@ import { useImportExport } from 'src/hooks/use-import-export';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { cx } from 'src/lib/cx';
 import { WizardHatToolkit } from 'src/modules/wizard-hat-toolkit';
+import { MySQLCredentials } from 'src/modules/mysql-credentials';
 
 export function SiteContentTabs() {
 	const { selectedSite } = useSiteDetails();
@@ -62,6 +63,7 @@ export function SiteContentTabs() {
 						{ name === 'assistant' && <ContentTabAssistant selectedSite={ selectedSite } /> }
 						{ name === 'import-export' && <ContentTabImportExport selectedSite={ selectedSite } /> }
 						{ name === 'wizard-hat-toolkit' && <WizardHatToolkit /> }
+						{ name === 'mysql-credentials' && <MySQLCredentials /> }
 					</div>
 				) }
 			</TabPanel>
