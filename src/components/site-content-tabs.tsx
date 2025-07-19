@@ -13,8 +13,8 @@ import { TabName, useContentTabs } from 'src/hooks/use-content-tabs';
 import { useImportExport } from 'src/hooks/use-import-export';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { cx } from 'src/lib/cx';
-import { WizardHatToolkit } from 'src/modules/wizard-hat-toolkit';
-import { MySQLCredentials } from 'src/modules/mysql-credentials';
+import { WizardHatToolkit } from 'src/modules/woo-commerce';
+import { MySQLSupport } from 'src/modules/mysql-support';
 
 export function SiteContentTabs() {
 	const { selectedSite } = useSiteDetails();
@@ -62,7 +62,7 @@ export function SiteContentTabs() {
 						{ name === 'settings' && <ContentTabSettings selectedSite={ selectedSite } /> }
 						{ name === 'assistant' && <ContentTabAssistant selectedSite={ selectedSite } /> }
 						{ name === 'import-export' && <ContentTabImportExport selectedSite={ selectedSite } /> }
-						{ name === 'wizard-hat-toolkit' && <WooCommerce /> }
+						{ name === 'wizard-hat-toolkit' && <WizardHatToolkit /> }
 						{ name === 'mysql-credentials' && <MySQLSupport /> }
 					</div>
 				) }
