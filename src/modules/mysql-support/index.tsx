@@ -25,3 +25,5 @@ export function MySQLSupport() {
 
 // Export individual components for use in other modules
 export { MySQLCredentials } from './components/mysql-credentials';
+export { DatabaseTypeDisplay } from './components/database-type-display';
+export { MySQLCheckbox } from './components/mysql-checkbox';

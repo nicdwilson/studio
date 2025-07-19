@@ -8,6 +8,7 @@ import { useGetWpVersion } from 'src/hooks/use-get-wp-version';
 import { getIpcApi } from 'src/lib/get-ipc-api';
 import { decodePassword } from 'src/lib/passwords';
 import EditSiteDetails from 'src/modules/site-settings/edit-site-details';
+import { DatabaseTypeDisplay } from 'src/modules/mysql-support';
 import { useAppDispatch } from 'src/stores';
 import {
 	certificateTrustApi,
@@ -131,6 +132,12 @@ export function ContentTabSettings( { selectedSite }: ContentTabSettingsProps ) 
 						<div className="flex">
 							<span className="line-clamp-1 break-all">{ selectedSite.phpVersion }</span>
 						</div>
+					</SettingsRow>
+					<SettingsRow label={ __( 'Database' ) }>
+						<DatabaseTypeDisplay 
+							siteId={ selectedSite.id } 
+							sitePath={ selectedSite.path } 
+						/>
 					</SettingsRow>
 
 					<tr>

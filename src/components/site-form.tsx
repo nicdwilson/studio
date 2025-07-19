@@ -13,6 +13,7 @@ import { cx } from 'src/lib/cx';
 import { generateCustomDomainFromSiteName } from 'src/lib/domains';
 import { getIpcApi } from 'src/lib/get-ipc-api';
 import { getLocalizedLink } from 'src/lib/get-localized-link';
+import { MySQLCheckbox } from 'src/modules/mysql-support';
 import { useI18nLocale } from 'src/stores';
 import { useCheckCertificateTrustQuery } from 'src/stores/certificate-trust-api';
 import {
@@ -72,6 +73,8 @@ interface SiteFormProps {
 	setEnableHttps?: ( use: boolean ) => void;
 	wpVersion: string;
 	setWpVersion: ( version: string ) => void;
+	useMySQL?: boolean;
+	setUseMySQL?: ( use: boolean ) => void;
 }
 
 const SiteFormError = ( { error, tipMessage = '', className = '' }: SiteFormErrorProps ) => {
@@ -262,6 +265,8 @@ export const SiteForm = ( {
 	customDomainError,
 	enableHttps,
 	setEnableHttps,
+	useMySQL = false,
+	setUseMySQL,
 }: SiteFormProps ) => {
 	const { __, isRTL } = useI18n();
 	const locale = useI18nLocale();
@@ -429,6 +434,16 @@ export const SiteForm = ( {
 												) }
 											/>
 										</div>
+
+										{ setUseMySQL && (
+											<div className="mt-4">
+												<MySQLCheckbox
+													checked={ useMySQL }
+													onChange={ setUseMySQL }
+													disabled={ false }
+												/>
+											</div>
+										) }
 
 										{ setUseCustomDomain && setCustomDomain && (
 											<div className="flex items-center gap-2 mt-4">

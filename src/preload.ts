@@ -132,6 +132,7 @@ const api: IpcApi = {
 	saveMySQLCredentials: ( credentials ) => ipcRendererInvoke( 'saveMySQLCredentials', credentials ),
 	getMySQLCredentials: () => ipcRendererInvoke( 'getMySQLCredentials' ),
 	clearMySQLCredentials: () => ipcRendererInvoke( 'clearMySQLCredentials' ),
+	hasMySQLConfiguration: ( siteId ) => ipcRendererInvoke( 'hasMySQLConfiguration', siteId ),
 	testMySQLConnection: ( credentials ) => ipcRendererInvoke( 'testMySQLConnection', credentials ),
 };
 

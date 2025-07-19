@@ -30,6 +30,7 @@ export function useAddSite() {
 	const [ customDomainError, setCustomDomainError ] = useState( '' );
 	const [ existingDomainNames, setExistingDomainNames ] = useState< string[] >( [] );
 	const [ enableHttps, setEnableHttps ] = useState( false );
+	const [ useMySQL, setUseMySQL ] = useState( false );
 
 	const loadAllCustomDomains = useCallback( () => {
 		getIpcApi()
@@ -111,6 +112,7 @@ export function useAddSite() {
 				wpVersion,
 				usedCustomDomain,
 				useCustomDomain ? enableHttps : false,
+				useMySQL, // useMySQL parameter
 				async ( newSite ) => {
 					let updatedSite = { ...newSite };
 
@@ -165,6 +167,7 @@ export function useAddSite() {
 		customDomain,
 		useCustomDomain,
 		enableHttps,
+		useMySQL,
 	] );
 
 	const handleSiteNameChange = useCallback(
@@ -233,6 +236,8 @@ export function useAddSite() {
 			setCustomDomainError,
 			enableHttps,
 			setEnableHttps,
+			useMySQL,
+			setUseMySQL,
 			loadAllCustomDomains,
 		};
 	}, [
@@ -257,6 +262,8 @@ export function useAddSite() {
 		setCustomDomainError,
 		enableHttps,
 		setEnableHttps,
+		useMySQL,
+		setUseMySQL,
 		loadAllCustomDomains,
 	] );
 }

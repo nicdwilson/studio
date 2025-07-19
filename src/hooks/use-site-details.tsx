@@ -25,6 +25,7 @@ interface SiteDetailsContext {
 		wpVersion?: string,
 		customDomain?: string,
 		enableHttps?: boolean,
+		useMySQL?: boolean,
 		callback?: ( site: SiteDetails ) => Promise< void >
 	) => Promise< SiteDetails | void >;
 	startServer: ( id: string ) => Promise< void >;
@@ -177,6 +178,7 @@ export function SiteDetailsProvider( { children }: SiteDetailsProviderProps ) {
 			wpVersion?: string,
 			customDomain?: string,
 			enableHttps?: boolean,
+			useMySQL?: boolean,
 			callback?: ( site: SiteDetails ) => Promise< void >
 		) => {
 			// Function to handle error messages and cleanup
@@ -222,7 +224,9 @@ export function SiteDetailsProvider( { children }: SiteDetailsProviderProps ) {
 					siteName,
 					wpVersion,
 					customDomain,
-					enableHttps
+					enableHttps,
+					undefined, // siteId
+					useMySQL
 				);
 				if ( ! newSite ) {
 					showError();

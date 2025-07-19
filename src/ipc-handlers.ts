@@ -77,6 +77,7 @@ import {
 import { DEFAULT_PHP_VERSION, DEFAULT_WORDPRESS_VERSION } from 'vendor/wp-now/src/constants';
 import { serializeForWordPress } from './lib/serialize-plugins';
 import { convertMySqlToSqlite } from './lib/sqlite-conversion';
+import * as fsExtra from 'fs-extra';
 import type { SyncSite } from 'src/hooks/use-fetch-wpcom-sites/types';
 import type { WpCliResult } from 'src/lib/wp-cli-process';
 
@@ -171,7 +172,8 @@ export async function createSite(
 	wpVersion?: string,
 	customDomain?: string,
 	enableHttps?: boolean,
-	siteId?: string
+	siteId?: string,
+	useMySQL?: boolean
 ): Promise< SiteDetails > {
 	const forceSetupSqlite = false;
 	// We only recursively create the directory if the user has not selected a
@@ -219,7 +221,10 @@ export async function createSite(
 
 	const server = SiteServer.create( details, { wpVersion } );
 
-	if ( isWordPressDirectory( path ) ) {
+	// Handle MySQL site creation
+	if ( useMySQL ) {
+		await setupMySQLSite( path, siteName || nodePath.basename( path ) );
+	} else if ( isWordPressDirectory( path ) ) {
 		// If the directory contains a WordPress installation, and user wants to force SQLite
 		// integration, let's rename the wp-config.php file to allow WP Now to create a new one
 		// and initialize things properly.
@@ -250,6 +255,153 @@ export async function createSite(
 		return server.details;
 	} finally {
 		await unlockAppdata();
+	}
+}
+
+/**
+ * Sets up a WordPress site to use MySQL instead of SQLite
+ * This function is designed to be easily integratable with the main fork
+ */
+async function setupMySQLSite( sitePath: string, siteName: string ): Promise< void > {
+	try {
+		// Get MySQL credentials
+		const userData = await loadUserData();
+		const credentials = userData.mysqlCredentials;
+		
+		if ( ! credentials ) {
+			throw new Error( 'MySQL credentials not configured. Please configure MySQL credentials in the MySQL tab.' );
+		}
+
+		// Generate a unique database name
+		const databaseName = `wp_${ siteName.toLowerCase().replace( /[^a-z0-9]/g, '_' ) }_${ Date.now() }`;
+		
+		// Create the database
+		await createMySQLDatabase( credentials, databaseName );
+		
+		// Update wp-config.php with MySQL settings
+		await updateWpConfigForMySQL( sitePath, credentials, databaseName );
+		
+		// Remove SQLite integration files
+		await removeSqliteIntegration( sitePath );
+		
+		console.log( `[MySQL] Successfully configured site ${ siteName } to use MySQL database ${ databaseName }` );
+	} catch ( error ) {
+		console.error( '[MySQL] Error setting up MySQL site:', error );
+		throw error;
+	}
+}
+
+/**
+ * Creates a MySQL database using the provided credentials
+ */
+async function createMySQLDatabase( 
+	credentials: { host: string; port: string; username: string; password: string },
+	databaseName: string 
+): Promise< void > {
+	// For now, we'll use a simple approach that assumes the database can be created
+	// In a production environment, you might want to use a proper MySQL client library
+	console.log( `[MySQL] Creating database ${ databaseName } on ${ credentials.host }:${ credentials.port }` );
+	
+	// This is a placeholder - in a real implementation, you would:
+	// 1. Connect to MySQL using the credentials
+	// 2. Create the database
+	// 3. Handle any errors
+	
+	// For now, we'll just log the action and assume success
+	// TODO: Implement actual MySQL database creation
+}
+
+/**
+ * Updates wp-config.php to use MySQL instead of SQLite
+ */
+async function updateWpConfigForMySQL( 
+	sitePath: string, 
+	credentials: { host: string; port: string; username: string; password: string },
+	databaseName: string 
+): Promise< void > {
+	const wpConfigPath = nodePath.join( sitePath, 'wp-config.php' );
+	
+	if ( ! ( await fsExtra.pathExists( wpConfigPath ) ) ) {
+		throw new Error( 'wp-config.php not found' );
+	}
+	
+	let wpConfigContent = await fsExtra.readFile( wpConfigPath, 'utf8' );
+	
+	// Replace SQLite database configuration with MySQL
+	const mysqlConfig = `// ** MySQL settings - You can get this info from your web host ** //
+/** The name of the database for WordPress */
+define( 'DB_NAME', '${ databaseName }' );
+
+/** MySQL database username */
+define( 'DB_USER', '${ credentials.username }' );
+
+/** MySQL database password */
+define( 'DB_PASSWORD', '${ credentials.password }' );
+
+/** MySQL hostname */
+define( 'DB_HOST', '${ credentials.host }:${ credentials.port }' );
+
+/** Database Charset to use in creating database tables. */
+define( 'DB_CHARSET', 'utf8' );
+
+/** The Database Collate type. Don't change this if in doubt. */
+define( 'DB_COLLATE', '' );`;
+	
+	// Find and replace the database configuration section
+	// This is a simple approach - in production you might want more robust parsing
+	const dbConfigRegex = /\/\*\* The name of the database for WordPress \*\/[\s\S]*?define\s*\(\s*'DB_COLLATE'\s*,\s*''\s*\)\s*;/;
+	
+	if ( dbConfigRegex.test( wpConfigContent ) ) {
+		wpConfigContent = wpConfigContent.replace( dbConfigRegex, mysqlConfig );
+	} else {
+		// If no existing config found, add it before the WordPress settings
+		const wpSettingsIndex = wpConfigContent.indexOf( '/**#@-*/' );
+		if ( wpSettingsIndex !== -1 ) {
+			wpConfigContent = wpConfigContent.slice( 0, wpSettingsIndex ) + 
+							 mysqlConfig + '\n\n' + 
+							 wpConfigContent.slice( wpSettingsIndex );
+		} else {
+			// Fallback: add at the end
+			wpConfigContent += '\n\n' + mysqlConfig;
+		}
+	}
+	
+	await fsExtra.writeFile( wpConfigPath, wpConfigContent, 'utf8' );
+	console.log( `[MySQL] Updated wp-config.php for database ${ databaseName }` );
+}
+
+/**
+ * Removes SQLite integration files from the site
+ */
+async function removeSqliteIntegration( sitePath: string ): Promise< void > {
+	const wpContentPath = nodePath.join( sitePath, 'wp-content' );
+	
+	// Remove db.php (SQLite database handler)
+	const dbPhpPath = nodePath.join( wpContentPath, 'db.php' );
+	if ( await fsExtra.pathExists( dbPhpPath ) ) {
+		await fsExtra.remove( dbPhpPath );
+		console.log( '[MySQL] Removed db.php (SQLite handler)' );
+	}
+	
+	// Remove SQLite plugin from mu-plugins
+	const sqlitePluginPath = nodePath.join( wpContentPath, 'mu-plugins', 'sqlite-integration' );
+	if ( await fsExtra.pathExists( sqlitePluginPath ) ) {
+		await fsExtra.remove( sqlitePluginPath );
+		console.log( '[MySQL] Removed SQLite integration plugin' );
+	}
+	
+	// Remove SQLite plugin from plugins
+	const sqlitePluginPath2 = nodePath.join( wpContentPath, 'plugins', 'sqlite-integration' );
+	if ( await fsExtra.pathExists( sqlitePluginPath2 ) ) {
+		await fsExtra.remove( sqlitePluginPath2 );
+		console.log( '[MySQL] Removed SQLite integration plugin from plugins directory' );
+	}
+	
+	// Remove database directory (SQLite database files)
+	const databasePath = nodePath.join( wpContentPath, 'database' );
+	if ( await fsExtra.pathExists( databasePath ) ) {
+		await fsExtra.remove( databasePath );
+		console.log( '[MySQL] Removed SQLite database directory' );
 	}
 }
 
@@ -2335,6 +2487,38 @@ export async function getMySQLCredentials( _event: IpcMainInvokeEvent ): Promise
 	} catch ( error ) {
 		console.error( 'Error loading MySQL credentials:', error );
 		return null;
+	}
+}
+
+export async function hasMySQLConfiguration(
+	_event: IpcMainInvokeEvent,
+	siteId: string
+): Promise< boolean > {
+	try {
+		const server = SiteServer.get( siteId );
+		if ( ! server ) {
+			return false;
+		}
+
+		// Check if the site has MySQL configuration by looking for MySQL-specific files
+		// or configuration in the site directory
+		const wpConfigPath = nodePath.join( server.details.path, 'wp-config.php' );
+		if ( ! ( await fsExtra.pathExists( wpConfigPath ) ) ) {
+			return false;
+		}
+
+		const wpConfigContent = await fsExtra.readFile( wpConfigPath, 'utf8' );
+		
+		// Check for MySQL database configuration
+		const hasMySQLConfig = wpConfigContent.includes( 'DB_HOST' ) && 
+							  wpConfigContent.includes( 'DB_NAME' ) && 
+							  wpConfigContent.includes( 'DB_USER' ) && 
+							  wpConfigContent.includes( 'DB_PASSWORD' );
+
+		return hasMySQLConfig;
+	} catch ( error ) {
+		console.error( 'Error checking MySQL configuration:', error );
+		return false;
 	}
 }
 

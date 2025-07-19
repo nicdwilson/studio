@@ -56,6 +56,8 @@ export default function AddSite( { className }: AddSiteProps ) {
 		setCustomDomainError,
 		enableHttps,
 		setEnableHttps,
+		useMySQL,
+		setUseMySQL,
 		loadAllCustomDomains,
 	} = useAddSite();
 	const { importState } = useImportExport();
@@ -121,6 +123,7 @@ export default function AddSite( { className }: AddSiteProps ) {
 		setCustomDomain( null );
 		setCustomDomainError( '' );
 		setEnableHttps( false );
+		setUseMySQL( false );
 	}, [
 		setSitePath,
 		setDoesPathContainWordPress,
@@ -131,6 +134,7 @@ export default function AddSite( { className }: AddSiteProps ) {
 		setCustomDomain,
 		setCustomDomainError,
 		setEnableHttps,
+		setUseMySQL,
 	] );
 
 	const handleSubmit = useCallback(
@@ -216,6 +220,8 @@ export default function AddSite( { className }: AddSiteProps ) {
 							customDomainError={ customDomainError }
 							enableHttps={ enableHttps }
 							setEnableHttps={ setEnableHttps }
+							useMySQL={ useMySQL }
+							setUseMySQL={ setUseMySQL }
 						>
 							<div className="flex flex-row justify-end gap-x-5 mt-6">
 								<Button onClick={ closeModal } variant="tertiary">
