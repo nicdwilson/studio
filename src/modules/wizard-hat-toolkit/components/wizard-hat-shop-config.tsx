@@ -1,6 +1,6 @@
+import { Button, Card, SelectControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { useI18n } from '@wordpress/react-i18n';
-import { Button, Card, SelectControl } from '@wordpress/components';
 import { useState, useEffect } from 'react';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { getIpcApi } from 'src/lib/get-ipc-api';

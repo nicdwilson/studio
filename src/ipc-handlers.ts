@@ -13,10 +13,12 @@ import {
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import https from 'node:https';
+import os from 'os';
 import nodePath from 'path';
 import * as Sentry from '@sentry/electron/main';
 import { __, LocaleData, defaultI18n } from '@wordpress/i18n';
 import archiver from 'archiver';
+import fetch from 'node-fetch';
 import { calculateDirectorySize, isWordPressDirectory, arePathsEqual } from 'common/lib/fs-utils';
 import { SupportedLocale } from 'common/lib/locale';
 import { getAuthenticationUrl } from 'common/lib/oauth';
@@ -73,12 +75,10 @@ import {
 	updateAppdata,
 } from 'src/storage/user-data';
 import { DEFAULT_PHP_VERSION, DEFAULT_WORDPRESS_VERSION } from 'vendor/wp-now/src/constants';
-import type { SyncSite } from 'src/hooks/use-fetch-wpcom-sites/types';
-import type { WpCliResult } from 'src/lib/wp-cli-process';
-import os from 'os';
-import fetch from 'node-fetch';
 import { serializeForWordPress } from './lib/serialize-plugins';
 import { convertMySqlToSqlite } from './lib/sqlite-conversion';
+import type { SyncSite } from 'src/hooks/use-fetch-wpcom-sites/types';
+import type { WpCliResult } from 'src/lib/wp-cli-process';
 
 const TEMP_DIR = nodePath.join( app.getPath( 'temp' ), 'com.wordpress.studio' ) + nodePath.sep;
 if ( ! fs.existsSync( TEMP_DIR ) ) {
@@ -1910,7 +1910,6 @@ export async function getAvailablePremiumPlugins(
 	plugins?: Array< { name: string; label: string } >;
 	error?: string;
 } > {
-
 	try {
 		// Validate token first
 		const tokenValidation = await validateGitHubToken( _event, githubToken );
@@ -1920,14 +1919,16 @@ export async function getAvailablePremiumPlugins(
 
 		// Fetch plugins from the repository
 
-		const response = await fetch( 'https://api.github.com/repos/woocommerce/all-plugins/contents/product-packages', {
-			headers: {
-				Authorization: `token ${ githubToken }`,
-				Accept: 'application/vnd.github.v3+json',
-				'User-Agent': 'WooCommerce-Studio',
-			},
-		} );
-
+		const response = await fetch(
+			'https://api.github.com/repos/woocommerce/all-plugins/contents/product-packages',
+			{
+				headers: {
+					Authorization: `token ${ githubToken }`,
+					Accept: 'application/vnd.github.v3+json',
+					'User-Agent': 'WooCommerce-Studio',
+				},
+			}
+		);
 
 		if ( ! response.ok ) {
 			return {
@@ -1937,7 +1938,7 @@ export async function getAvailablePremiumPlugins(
 		}
 
 		const contents = ( await response.json() ) as any[];
-		
+
 		const plugins: Array< { name: string; label: string } > = [];
 
 		for ( const item of contents ) {
@@ -1952,8 +1953,6 @@ export async function getAvailablePremiumPlugins(
 			}
 		}
 
-
-		
 		return { success: true, plugins };
 	} catch ( error ) {
 		console.error( 'Error fetching premium plugins:', error );
@@ -2239,64 +2238,68 @@ async function processRunSqlStep(
 	if ( sql.resource === 'literal' && sql.contents ) {
 		try {
 			// Convert MySQL-specific SQL to SQLite-compatible SQL
-			let sqliteCompatibleSql = convertMySqlToSqlite( sql.contents );
-			
-			console.log(`[Wizard Hat] Original SQL: ${sql.contents}`);
-			console.log(`[Wizard Hat] SQLite-compatible SQL: ${sqliteCompatibleSql}`);
-			
+			const sqliteCompatibleSql = convertMySqlToSqlite( sql.contents );
+
+			console.log( `[Wizard Hat] Original SQL: ${ sql.contents }` );
+			console.log( `[Wizard Hat] SQLite-compatible SQL: ${ sqliteCompatibleSql }` );
+
 			// Create a temporary SQL file in the site directory
-			const tempSqlFile = nodePath.join(site.details.path, `blueprint-sql-${Date.now()}.sql`);
-			
+			const tempSqlFile = nodePath.join( site.details.path, `blueprint-sql-${ Date.now() }.sql` );
+
 			try {
 				// Write SQL to temporary file
-				await fs.promises.writeFile(tempSqlFile, sqliteCompatibleSql, 'utf8');
-				
-				console.log(`[Wizard Hat] SQL written to temporary file: ${tempSqlFile}`);
-				
+				await fs.promises.writeFile( tempSqlFile, sqliteCompatibleSql, 'utf8' );
+
+				console.log( `[Wizard Hat] SQL written to temporary file: ${ tempSqlFile }` );
+
 				// Execute SQL using Studio's native SQLite import command
 				// This is the same approach used by Studio's database import functionality
-				const result = await executeWPCLiInline(event, {
+				const result = await executeWPCLiInline( event, {
 					siteId: site.details.id,
-					args: `sqlite import ${nodePath.basename(tempSqlFile)} --require=/tmp/sqlite-command/command.php`,
-					skipPluginsAndThemes: true
-				});
+					args: `sqlite import ${ nodePath.basename(
+						tempSqlFile
+					) } --require=/tmp/sqlite-command/command.php`,
+					skipPluginsAndThemes: true,
+				} );
 
-				if (result.exitCode === 0) {
-					results.push({
+				if ( result.exitCode === 0 ) {
+					results.push( {
 						step: 'runSql',
 						success: true,
-						message: `Successfully executed SQL: ${sql.name || 'unnamed query'}`
-					});
+						message: `Successfully executed SQL: ${ sql.name || 'unnamed query' }`,
+					} );
 				} else {
-					console.error(`[Wizard Hat] SQL execution failed:`, result.stderr);
-					results.push({
+					console.error( `[Wizard Hat] SQL execution failed:`, result.stderr );
+					results.push( {
 						step: 'runSql',
 						success: false,
-						message: `Failed to execute SQL ${sql.name || 'unnamed query'}: ${result.stderr}`
-					});
+						message: `Failed to execute SQL ${ sql.name || 'unnamed query' }: ${ result.stderr }`,
+					} );
 				}
 			} finally {
 				// Clean up temporary file
 				try {
-					await fs.promises.unlink(tempSqlFile);
-				} catch (cleanupError) {
-					console.warn(`[Wizard Hat] Failed to cleanup temp SQL file:`, cleanupError);
+					await fs.promises.unlink( tempSqlFile );
+				} catch ( cleanupError ) {
+					console.warn( `[Wizard Hat] Failed to cleanup temp SQL file:`, cleanupError );
 				}
 			}
-		} catch (error) {
-			console.error(`[Wizard Hat] Error processing SQL:`, error);
-			results.push({
+		} catch ( error ) {
+			console.error( `[Wizard Hat] Error processing SQL:`, error );
+			results.push( {
 				step: 'runSql',
 				success: false,
-				message: `Error processing SQL ${sql.name || 'unnamed query'}: ${error instanceof Error ? error.message : 'Unknown error'}`
-			});
+				message: `Error processing SQL ${ sql.name || 'unnamed query' }: ${
+					error instanceof Error ? error.message : 'Unknown error'
+				}`,
+			} );
 		}
 	} else {
-		results.push({
+		results.push( {
 			step: 'runSql',
 			success: false,
-			message: `Unsupported SQL resource type: ${sql.resource}`
-		});
+			message: `Unsupported SQL resource type: ${ sql.resource }`,
+		} );
 	}
 }
 
@@ -2320,9 +2323,7 @@ export async function saveMySQLCredentials(
 	}
 }
 
-export async function getMySQLCredentials(
-	_event: IpcMainInvokeEvent
-): Promise< {
+export async function getMySQLCredentials( _event: IpcMainInvokeEvent ): Promise< {
 	host: string;
 	port: string;
 	username: string;
@@ -2380,7 +2381,9 @@ export async function testMySQLConnection(
 		// TODO: Implement actual MySQL connection test
 		return {
 			success: true,
-			message: __( 'Credentials format is valid. Connection test will be implemented in the next phase.' ),
+			message: __(
+				'Credentials format is valid. Connection test will be implemented in the next phase.'
+			),
 		};
 	} catch ( error ) {
 		console.error( 'Error testing MySQL connection:', error );

@@ -62,8 +62,8 @@ export function SiteContentTabs() {
 						{ name === 'settings' && <ContentTabSettings selectedSite={ selectedSite } /> }
 						{ name === 'assistant' && <ContentTabAssistant selectedSite={ selectedSite } /> }
 						{ name === 'import-export' && <ContentTabImportExport selectedSite={ selectedSite } /> }
-						{ name === 'wizard-hat-toolkit' && <WizardHatToolkit /> }
-						{ name === 'mysql-credentials' && <MySQLCredentials /> }
+						{ name === 'wizard-hat-toolkit' && <WooCommerce /> }
+						{ name === 'mysql-credentials' && <MySQLSupport /> }
 					</div>
 				) }
 			</TabPanel>

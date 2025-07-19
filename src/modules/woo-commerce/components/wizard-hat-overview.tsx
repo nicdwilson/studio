@@ -1,11 +1,11 @@
-import { __ } from '@wordpress/i18n';
-import { useI18n } from '@wordpress/react-i18n';
 import { Card, Button, Icon } from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
 import { cog, archive, edit, page, download, help, info } from '@wordpress/icons';
+import { useI18n } from '@wordpress/react-i18n';
+import { useState, useEffect } from 'react';
 import { ButtonsSection, ButtonsSectionProps } from 'src/components/buttons-section';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { getIpcApi } from 'src/lib/get-ipc-api';
-import { useState, useEffect } from 'react';
 
 export function WizardHatOverview() {
 	const { __ } = useI18n();

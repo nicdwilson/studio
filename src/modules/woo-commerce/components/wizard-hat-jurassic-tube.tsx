@@ -1,6 +1,6 @@
+import { Card } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { useI18n } from '@wordpress/react-i18n';
-import { Card } from '@wordpress/components';
 
 export function WizardHatJurassicTube() {
 	const { __ } = useI18n();
@@ -23,7 +23,9 @@ export function WizardHatJurassicTube() {
 						) }
 					</p>
 					<p className="text-gray-500 text-sm">
-						{ __( 'This feature is currently under development and will be available in a future update.' ) }
+						{ __(
+							'This feature is currently under development and will be available in a future update.'
+						) }
 					</p>
 				</div>
 			</Card>

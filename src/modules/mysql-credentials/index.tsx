@@ -1,7 +1,7 @@
+import { Button, Card, TextControl, Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { useI18n } from '@wordpress/react-i18n';
 import { useState, useEffect } from 'react';
-import { Button, Card, TextControl, Notice } from '@wordpress/components';
 import { getIpcApi } from 'src/lib/get-ipc-api';
 
 interface MySQLCredentials {
@@ -21,7 +21,9 @@ export function MySQLCredentials() {
 	} );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ isTesting, setIsTesting ] = useState( false );
-	const [ testResult, setTestResult ] = useState< { success: boolean; message: string } | null >( null );
+	const [ testResult, setTestResult ] = useState< { success: boolean; message: string } | null >(
+		null
+	);
 	const [ savedCredentials, setSavedCredentials ] = useState< MySQLCredentials | null >( null );
 
 	// Load saved credentials on component mount
@@ -201,11 +203,7 @@ export function MySQLCredentials() {
 					</Button>
 
 					{ savedCredentials && (
-						<Button
-							variant="tertiary"
-							onClick={ handleClear }
-							disabled={ isSaving || isTesting }
-						>
+						<Button variant="tertiary" onClick={ handleClear } disabled={ isSaving || isTesting }>
 							{ __( 'Clear Credentials' ) }
 						</Button>
 					) }
@@ -226,9 +224,7 @@ export function MySQLCredentials() {
 						</div>
 						<div>
 							<strong>{ __( 'Status' ) }:</strong>{ ' ' }
-							<span className="text-green-600 font-medium">
-								{ __( 'Configured' ) }
-							</span>
+							<span className="text-green-600 font-medium">{ __( 'Configured' ) }</span>
 						</div>
 					</div>
 				</Card>
@@ -258,9 +254,7 @@ export function MySQLCredentials() {
 					<li className="flex items-start">
 						<span className="font-medium mr-2">3.</span>
 						<span>
-							{ __(
-								'When creating a new site, select the MySQL option to use these credentials'
-							) }
+							{ __( 'When creating a new site, select the MySQL option to use these credentials' ) }
 						</span>
 					</li>
 					<li className="flex items-start">
@@ -275,44 +269,30 @@ export function MySQLCredentials() {
 			</div>
 
 			<div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mx-8">
-				<h3 className="text-lg font-medium text-yellow-900 mb-2">
-					{ __( 'Important Notes' ) }
-				</h3>
+				<h3 className="text-lg font-medium text-yellow-900 mb-2">{ __( 'Important Notes' ) }</h3>
 				<ul className="text-yellow-800 space-y-2">
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
 						<span>
-							{ __(
-								'MySQL credentials are stored securely and used only for site creation'
-							) }
+							{ __( 'MySQL credentials are stored securely and used only for site creation' ) }
 						</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
 						<span>
-							{ __(
-								'Each new site will create its own database using these credentials'
-							) }
+							{ __( 'Each new site will create its own database using these credentials' ) }
 						</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
-						<span>
-							{ __(
-								'Make sure your MySQL user has CREATE DATABASE permissions'
-							) }
-						</span>
+						<span>{ __( 'Make sure your MySQL user has CREATE DATABASE permissions' ) }</span>
 					</li>
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
-						<span>
-							{ __(
-								'Existing sites using SQLite will continue to work normally'
-							) }
-						</span>
+						<span>{ __( 'Existing sites using SQLite will continue to work normally' ) }</span>
 					</li>
 				</ul>
 			</div>
 		</div>
 	);
-} 
+}

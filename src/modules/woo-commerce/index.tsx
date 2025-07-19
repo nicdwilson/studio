@@ -1,13 +1,13 @@
 import { __ } from '@wordpress/i18n';
 import { useI18n } from '@wordpress/react-i18n';
 import { useState, createContext, useContext } from 'react';
-import { WizardHatOverview } from './components/wizard-hat-overview';
-import { WizardHatJurassicTube } from './components/wizard-hat-jurassic-tube';
-import { WizardHatShopConfig } from './components/wizard-hat-shop-config';
-import { WizardHatPluginManagement } from './components/wizard-hat-plugin-management';
-import { WizardHatTools } from './components/wizard-hat-tools';
-import { WizardHatImportBlueprint } from './components/wizard-hat-import-blueprint';
 import { useSiteDetails } from 'src/hooks/use-site-details';
+import { WizardHatImportBlueprint } from './components/wizard-hat-import-blueprint';
+import { WizardHatJurassicTube } from './components/wizard-hat-jurassic-tube';
+import { WizardHatOverview } from './components/wizard-hat-overview';
+import { WizardHatPluginManagement } from './components/wizard-hat-plugin-management';
+import { WizardHatShopConfig } from './components/wizard-hat-shop-config';
+import { WizardHatTools } from './components/wizard-hat-tools';
 
 export type WizardHatTabName =
 	| 'overview'
