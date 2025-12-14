@@ -56,6 +56,8 @@ export interface IpcEvents {
 	'user-data-error': [ string ];
 	'refresh-app-globals': [ void ];
 	'beta-features-updated': [ void ];
+	'repository-path-validated': [ { valid: boolean; error?: string; path?: string } ];
+	'repository-path-saved': [ { success: boolean; error?: string } ];
 }
 
 export async function sendIpcEventToRenderer< T extends keyof IpcEvents >(

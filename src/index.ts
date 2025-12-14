@@ -176,12 +176,21 @@ async function appBoot() {
 	}
 
 	function setupIpc() {
+		if ( ! ipcHandlers || typeof ipcHandlers !== 'object' ) {
+			console.error( 'ipcHandlers is not a valid object:', ipcHandlers );
+			throw new Error( 'Failed to load IPC handlers module' );
+		}
+
 		const ipcHandlerEntries = Object.entries( ipcHandlers ) as [
 			keyof typeof ipcHandlers,
 			( ...args: unknown[] ) => unknown,
 		][];
 
 		for ( const [ key, handler ] of ipcHandlerEntries ) {
+			if ( ! handler || typeof handler !== 'function' ) {
+				console.error( `IPC handler "${ key }" is not a function:`, handler );
+				continue;
+			}
 			if ( IPC_VOID_HANDLERS.find( ( handler ) => handler === key ) ) {
 				ipcMain.on( key, function ( event, ...args: unknown[] ) {
 					try {

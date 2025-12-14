@@ -1,4 +1,4 @@
-import { dialog } from 'electron';
+import { dialog, type IpcMainInvokeEvent } from 'electron';
 import { __ } from '@wordpress/i18n';
 import { getMainWindow } from 'src/main-window';
 import { MacOSCliInstallationManager } from 'src/modules/cli/lib/macos-installation-manager';
@@ -28,7 +28,7 @@ function isPlatformSupported(): boolean {
 	return process.platform === 'darwin' || process.platform === 'win32';
 }
 
-export async function isStudioCliInstalled(): Promise< boolean > {
+export async function isStudioCliInstalled( _event: IpcMainInvokeEvent ): Promise< boolean > {
 	if ( isPlatformSupported() ) {
 		const manager = getCliInstallationManager();
 		return await manager.isCliInstalled();
@@ -36,7 +36,7 @@ export async function isStudioCliInstalled(): Promise< boolean > {
 	return false;
 }
 
-export async function installStudioCli(): Promise< void > {
+export async function installStudioCli( _event: IpcMainInvokeEvent ): Promise< void > {
 	if ( process.env.NODE_ENV !== 'production' ) {
 		const mainWindow = await getMainWindow();
 		const { response } = await dialog.showMessageBox( mainWindow, {
@@ -58,7 +58,7 @@ export async function installStudioCli(): Promise< void > {
 	}
 }
 
-export async function uninstallStudioCli(): Promise< void > {
+export async function uninstallStudioCli( _event: IpcMainInvokeEvent ): Promise< void > {
 	if ( process.env.NODE_ENV !== 'production' ) {
 		const mainWindow = await getMainWindow();
 		const { response } = await dialog.showMessageBox( mainWindow, {

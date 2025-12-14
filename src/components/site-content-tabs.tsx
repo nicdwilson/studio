@@ -14,6 +14,7 @@ import { useImportExport } from 'src/hooks/use-import-export';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { cx } from 'src/lib/cx';
 import { ContentTabSync } from 'src/modules/sync';
+import { WizardHatToolkit } from 'src/modules/woocommerce';
 
 export function SiteContentTabs() {
 	const { selectedSite, siteCreationMessages } = useSiteDetails();
@@ -108,6 +109,7 @@ export function SiteContentTabs() {
 						{ name === 'settings' && <ContentTabSettings selectedSite={ selectedSite } /> }
 						{ name === 'assistant' && <ContentTabAssistant selectedSite={ selectedSite } /> }
 						{ name === 'import-export' && <ContentTabImportExport selectedSite={ selectedSite } /> }
+						{ name === 'wizard-hat-toolkit' && <WizardHatToolkit /> }
 					</div>
 				) }
 			</TabPanel>

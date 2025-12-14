@@ -1,6 +1,6 @@
 import { Card, Button, Icon } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { cog, archive, edit, page, download, help, info } from '@wordpress/icons';
+import { cog, archive, pencil, page, download, help, info } from '@wordpress/icons';
 import { useI18n } from '@wordpress/react-i18n';
 import { useState, useEffect } from 'react';
 import { ButtonsSection, ButtonsSectionProps } from 'src/components/buttons-section';
@@ -78,7 +78,7 @@ export function WizardHatOverview() {
 		},
 		{
 			label: __( 'Payments' ),
-			icon: edit,
+			icon: pencil,
 			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=checkout' ),
 		},
 		{
@@ -115,7 +115,7 @@ export function WizardHatOverview() {
 		},
 		{
 			label: __( 'Subscriptions' ),
-			icon: edit,
+			icon: pencil,
 			onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-settings&tab=subscriptions' ),
 		},
 	];
@@ -140,14 +140,14 @@ export function WizardHatOverview() {
 			// HPOS enabled - use the new orders page
 			baseButtons.push( {
 				label: __( 'Orders' ),
-				icon: edit,
+				icon: pencil,
 				onClick: handleWooCommerceClick( '/wp-admin/admin.php?page=wc-orders' ),
 			} );
 		} else if ( isHPOS === false ) {
 			// HPOS disabled - use the traditional orders page
 			baseButtons.push( {
 				label: __( 'Orders' ),
-				icon: edit,
+				icon: pencil,
 				onClick: handleWooCommerceClick( '/wp-admin/edit.php?post_type=shop_order' ),
 			} );
 		}

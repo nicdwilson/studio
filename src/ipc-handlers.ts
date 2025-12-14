@@ -660,7 +660,7 @@ export function copyText( event: IpcMainInvokeEvent, text: string ) {
 	return clipboard.writeText( text );
 }
 
-export function getAppGlobals(): AppGlobals {
+export function getAppGlobals( _event: IpcMainInvokeEvent ): AppGlobals {
 	return {
 		platform: process.platform,
 		appName: app.name,
@@ -1385,5 +1385,238 @@ export async function setWindowControlVisibility( event: IpcMainInvokeEvent, vis
 	const parentWindow = BrowserWindow.fromWebContents( event.sender );
 	if ( parentWindow && process.platform === 'darwin' ) {
 		parentWindow.setWindowButtonVisibility( visible );
+	}
+}
+
+export async function validateRepositoryPath(
+	_event: IpcMainInvokeEvent,
+	repositoryPath: string
+): Promise< { valid: boolean; error?: string; path?: string } > {
+	try {
+		// Check if path exists
+		if ( ! fs.existsSync( repositoryPath ) ) {
+			return {
+				valid: false,
+				error: __( 'Path does not exist. Please check the path and try again.' ),
+			};
+		}
+
+		// Check if it's a directory
+		const stats = fs.statSync( repositoryPath );
+		if ( ! stats.isDirectory() ) {
+			return {
+				valid: false,
+				error: __( 'Path is not a directory. Please provide the path to the repository folder.' ),
+			};
+		}
+
+		// Check if product-packages directory exists (for all-plugins repo)
+		const productPackagesPath = nodePath.join( repositoryPath, 'product-packages' );
+		if ( ! fs.existsSync( productPackagesPath ) ) {
+			return {
+				valid: false,
+				error: __(
+					'Repository does not contain a "product-packages" directory. Please ensure this is the correct all-plugins repository.'
+				),
+			};
+		}
+
+		// Check if it's a git repository (optional but recommended)
+		const gitPath = nodePath.join( repositoryPath, '.git' );
+		if ( ! fs.existsSync( gitPath ) ) {
+			writeLogToFile(
+				'warn',
+				`Repository path ${ repositoryPath } does not appear to be a git repository`
+			);
+			// Don't fail validation, but log a warning
+		}
+
+		return {
+			valid: true,
+			path: repositoryPath,
+		};
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		writeLogToFile( 'erro', `Error validating repository path: ${ errorMessage }` );
+		return {
+			valid: false,
+			error: sprintf( __( 'Error validating path: %s' ), errorMessage ),
+		};
+	}
+}
+
+export async function saveRepositoryPath(
+	_event: IpcMainInvokeEvent,
+	repositoryPath: string
+): Promise< { success: boolean; error?: string } > {
+	try {
+		const userData = await loadUserData();
+		await saveUserData( {
+			...userData,
+			allPluginsRepositoryPath: repositoryPath || undefined,
+		} );
+
+		writeLogToFile( 'info', `Saved repository path: ${ repositoryPath }` );
+		const window = BrowserWindow.fromWebContents( _event.sender );
+		sendIpcEventToRendererWithWindow( window, 'repository-path-saved', { success: true } );
+		return { success: true };
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		writeLogToFile( 'erro', `Error saving repository path: ${ errorMessage }` );
+		const window = BrowserWindow.fromWebContents( _event.sender );
+		sendIpcEventToRendererWithWindow( window, 'repository-path-saved', {
+			success: false,
+			error: errorMessage,
+		} );
+		return {
+			success: false,
+			error: String( error ),
+		};
+	}
+}
+
+export async function getRepositoryPath(
+	_event: IpcMainInvokeEvent
+): Promise< { configured: boolean; path: string | null } > {
+	const userData = await loadUserData();
+	const repositoryPath = userData.allPluginsRepositoryPath;
+	return {
+		configured: !! repositoryPath,
+		path: repositoryPath || null,
+	};
+}
+
+export async function installPluginFromLocalRepo(
+	_event: IpcMainInvokeEvent,
+	options: {
+		siteId: string;
+		repositoryPath: string;
+		pluginName: string;
+	}
+): Promise< { success: boolean; error?: string } > {
+	try {
+		const { siteId, repositoryPath, pluginName } = options;
+
+		// Validate repository path exists
+		if ( ! fs.existsSync( repositoryPath ) ) {
+			return {
+				success: false,
+				error: __( 'Repository path does not exist' ),
+			};
+		}
+
+		// Construct path to plugin zip file
+		const pluginZipPath = nodePath.join(
+			repositoryPath,
+			'product-packages',
+			pluginName,
+			`${ pluginName }.zip`
+		);
+
+		if ( ! fs.existsSync( pluginZipPath ) ) {
+			return {
+				success: false,
+				error: sprintf(
+					__( 'Plugin zip file not found at %s. Please ensure the repository is up to date.' ),
+					pluginZipPath
+				),
+			};
+		}
+
+		// Get site details
+		const userData = await loadUserData();
+		const site = userData.sites.find( ( s ) => s.id === siteId );
+		if ( ! site ) {
+			return {
+				success: false,
+				error: __( 'Site not found' ),
+			};
+		}
+
+		// Install plugin using WP-CLI
+		const server = SiteServer.get( siteId );
+		if ( ! server ) {
+			return {
+				success: false,
+				error: __( 'Site not found' ),
+			};
+		}
+
+		const result = await server.executeWpCliCommand(
+			`plugin install "${ pluginZipPath }" --activate --force`
+		);
+
+		if ( result.exitCode === 0 ) {
+			return { success: true };
+		} else {
+			return {
+				success: false,
+				error: result.stderr || __( 'Failed to install plugin' ),
+			};
+		}
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		writeLogToFile( 'erro', `Error installing plugin from local repo: ${ errorMessage }` );
+		return {
+			success: false,
+			error: errorMessage,
+		};
+	}
+}
+
+export async function getAvailablePluginsFromRepository(
+	_event: IpcMainInvokeEvent,
+	repositoryPath: string
+): Promise< { success: boolean; plugins?: Array< { name: string; label: string } >; error?: string } > {
+	try {
+		if ( ! fs.existsSync( repositoryPath ) ) {
+			return {
+				success: false,
+				error: __( 'Repository path does not exist' ),
+			};
+		}
+
+		const productPackagesPath = nodePath.join( repositoryPath, 'product-packages' );
+		if ( ! fs.existsSync( productPackagesPath ) ) {
+			return {
+				success: false,
+				error: __( 'Repository does not contain a "product-packages" directory' ),
+			};
+		}
+
+		const entries = fs.readdirSync( productPackagesPath, { withFileTypes: true } );
+		const plugins: Array< { name: string; label: string } > = [];
+
+		for ( const entry of entries ) {
+			if ( entry.isDirectory() ) {
+				const pluginSlug = entry.name;
+				const pluginZipPath = nodePath.join( productPackagesPath, pluginSlug, `${ pluginSlug }.zip` );
+
+				if ( fs.existsSync( pluginZipPath ) ) {
+					// Convert slug to label (e.g., "woocommerce-subscriptions" -> "WooCommerce Subscriptions")
+					const label = pluginSlug
+						.split( '-' )
+						.map( ( word ) => word.charAt( 0 ).toUpperCase() + word.slice( 1 ) )
+						.join( ' ' );
+
+					plugins.push( {
+						name: pluginSlug,
+						label,
+					} );
+				}
+			}
+		}
+
+		return {
+			success: true,
+			plugins,
+		};
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		writeLogToFile( 'erro', `Error getting plugins from repository: ${ errorMessage }` );
+		return {
+			success: false,
+			error: errorMessage,
+		};
 	}
 }

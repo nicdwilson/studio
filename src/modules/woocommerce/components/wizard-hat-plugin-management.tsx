@@ -4,6 +4,7 @@ import { useI18n } from '@wordpress/react-i18n';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { getIpcApi } from 'src/lib/get-ipc-api';
+import { RepositorySetup } from './repository-setup';
 
 interface PluginOption {
 	label: string;
@@ -39,8 +40,6 @@ const QUICK_INSTALL_MARKETPLACE_PLUGINS: PluginOption[] = [
 ];
 
 export function WizardHatPluginManagement() {
-	console.log( 'WIZARD HAT PLUGIN MANAGEMENT COMPONENT LOADED - TIMESTAMP:', Date.now() );
-
 	const { __ } = useI18n();
 	const { selectedSite } = useSiteDetails();
 	const { startServer, loadingServer } = useSiteDetails();
@@ -48,9 +47,9 @@ export function WizardHatPluginManagement() {
 	const [ installing, setInstalling ] = useState( false );
 	const [ installationLog, setInstallationLog ] = useState< string[] >( [] );
 
-	// Marketplace functionality
-	const [ githubToken, setGithubToken ] = useState( '' );
-	const [ tokenValid, setTokenValid ] = useState( false );
+	// Repository path functionality
+	const [ repositoryPath, setRepositoryPath ] = useState< string | null >( null );
+	const [ showRepositorySetup, setShowRepositorySetup ] = useState( false );
 	const [ allPremiumPlugins, setAllPremiumPlugins ] = useState< PluginOption[] >( [] );
 	const [ loadingPremiumPlugins, setLoadingPremiumPlugins ] = useState( false );
 	const [ searchTerm, setSearchTerm ] = useState( '' );
@@ -71,57 +70,35 @@ export function WizardHatPluginManagement() {
 		};
 	}, [] );
 
-	// Load GitHub token for marketplace functionality
+	// Load repository path on mount
 	useEffect( () => {
-		const savedToken = localStorage.getItem( 'wizard-hat-github-token' );
-		if ( savedToken ) {
-			setGithubToken( savedToken );
-			validateToken( savedToken );
-		}
+		void checkRepositoryPath();
 	}, [] );
 
-	if ( ! selectedSite ) {
-		return (
-			<div className="space-y-8">
-				<div className="max-w-3xl px-8">
-					<h2 className="text-xl font-semibold text-gray-900 mb-4">
-						{ __( 'Plugin Management' ) }
-					</h2>
-					<p className="text-gray-600 mb-6">{ __( 'Please select a site to manage plugins.' ) }</p>
-				</div>
-			</div>
-		);
-	}
-
-	const isLoading = selectedSite?.id ? loadingServer[ selectedSite.id ] : false;
-
-	const validateToken = async ( token: string ) => {
+	const checkRepositoryPath = async () => {
 		try {
-			if ( token.length === 0 ) {
-				setTokenValid( false );
+			// Ensure IPC API is available
+			if ( ! window.ipcApi ) {
+				console.warn( 'IPC API not available yet' );
 				return;
 			}
-
-			const result = await getIpcApi().validateGitHubToken( token );
-
-			if ( result.valid ) {
-				setTokenValid( true );
-				await loadPremiumPlugins( token );
+			const result = await getIpcApi().getRepositoryPath();
+			if ( result.configured && result.path ) {
+				setRepositoryPath( result.path );
+				void loadPremiumPlugins( result.path );
 			} else {
-				setTokenValid( false );
-				setAllPremiumPlugins( [] );
+				setRepositoryPath( null );
 			}
 		} catch ( error ) {
-			console.error( 'Token validation error:', error );
-			setTokenValid( false );
-			setAllPremiumPlugins( [] );
+			console.error( 'Error checking repository path:', error );
+			setRepositoryPath( null );
 		}
 	};
 
-	const loadPremiumPlugins = async ( token: string ) => {
+	const loadPremiumPlugins = async ( repoPath: string ) => {
 		setLoadingPremiumPlugins( true );
 		try {
-			const result = await getIpcApi().getAvailablePremiumPlugins( token );
+			const result = await getIpcApi().getAvailablePluginsFromRepository( repoPath );
 
 			if ( result.success && result.plugins ) {
 				const premiumOptions: PluginOption[] = result.plugins.map( ( plugin ) => ( {
@@ -142,6 +119,27 @@ export function WizardHatPluginManagement() {
 			setLoadingPremiumPlugins( false );
 		}
 	};
+
+	const handleInstallOrUpdateClick = () => {
+		if ( ! repositoryPath ) {
+			setShowRepositorySetup( true );
+		}
+	};
+
+	if ( ! selectedSite ) {
+		return (
+			<div className="space-y-8">
+				<div className="max-w-3xl px-8">
+					<h2 className="text-xl font-semibold text-gray-900 mb-4">
+						{ __( 'Plugin Management' ) }
+					</h2>
+					<p className="text-gray-600 mb-6">{ __( 'Please select a site to manage plugins.' ) }</p>
+				</div>
+			</div>
+		);
+	}
+
+	const isLoading = selectedSite?.id ? loadingServer[ selectedSite.id ] : false;
 
 	const togglePlugin = ( pluginValue: string ) => {
 		setSelectedPlugins( ( prev ) =>
@@ -180,7 +178,7 @@ export function WizardHatPluginManagement() {
 				setShowSearchResults( false );
 			}
 		},
-		[ allPremiumPlugins.length, tokenValid, loadingPremiumPlugins ]
+		[ allPremiumPlugins.length, loadingPremiumPlugins ]
 	);
 
 	const addPremiumPluginFromSearch = ( pluginValue: string ) => {
@@ -193,6 +191,17 @@ export function WizardHatPluginManagement() {
 
 	const installSelectedPlugins = async () => {
 		if ( selectedPlugins.length === 0 ) return;
+
+		// Check if repository path is configured for premium plugins
+		const premiumPluginsToInstall = [
+			...QUICK_INSTALL_MARKETPLACE_PLUGINS,
+			...allPremiumPlugins,
+		].filter( ( plugin ) => selectedPlugins.includes( plugin.value ) );
+
+		if ( premiumPluginsToInstall.length > 0 && ! repositoryPath ) {
+			setShowRepositorySetup( true );
+			return;
+		}
 
 		setInstalling( true );
 		setInstallationLog( [] );
@@ -227,14 +236,13 @@ export function WizardHatPluginManagement() {
 					setInstallationLog( ( prev ) => [ ...prev, `📦 Installing ${ plugin.label }...` ] );
 
 					if ( plugin.type === 'premium' ) {
-						if ( ! githubToken ) {
-							throw new Error( 'GitHub token required for premium plugins' );
+						if ( ! repositoryPath ) {
+							throw new Error( 'Repository path not configured for premium plugins' );
 						}
 
-						const result = await getIpcApi().installPluginFromPrivateRepo( {
+						const result = await getIpcApi().installPluginFromLocalRepo( {
 							siteId: selectedSite.id,
-							repositoryUrl: plugin.repository!,
-							githubToken,
+							repositoryPath: repositoryPath!,
 							pluginName: plugin.value,
 						} );
 
@@ -307,12 +315,21 @@ export function WizardHatPluginManagement() {
 	};
 
 	return (
+		<>
+			<RepositorySetup
+				isOpen={ showRepositorySetup }
+				onClose={ async () => {
+					setShowRepositorySetup( false );
+					await checkRepositoryPath();
+				} }
+			/>
+
 		<div className="space-y-8">
 			<div className="max-w-3xl px-8">
 				<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Plugin Management' ) }</h2>
 				<p className="text-gray-600 mb-6">
 					{ __(
-						'Install and manage WooCommerce plugins. Configure your GitHub token in the Tools tab for marketplace plugins.'
+							'Install and manage WooCommerce plugins. Configure your local all-plugins repository path to install marketplace plugins.'
 					) }
 				</p>
 			</div>
@@ -335,14 +352,22 @@ export function WizardHatPluginManagement() {
 							key={ plugin.value }
 							label={ plugin.label }
 							checked={ selectedPlugins.includes( plugin.value ) }
-							onChange={ () => togglePlugin( plugin.value ) }
-							disabled={ ! tokenValid }
+								onChange={ () => {
+									if ( ! repositoryPath ) {
+										setShowRepositorySetup( true );
+									} else {
+										togglePlugin( plugin.value );
+									}
+								} }
+								disabled={ ! repositoryPath }
 						/>
 					) ) }
 				</div>
-				{ ! tokenValid && (
+					{ ! repositoryPath && (
 					<p className="text-sm text-gray-500 mt-2">
-						{ __( 'Configure your GitHub token in the Tools tab to install marketplace plugins.' ) }
+							{ __(
+								'Configure your local all-plugins repository path to install marketplace plugins. Click on a marketplace plugin to set it up.'
+							) }
 					</p>
 				) }
 			</Card>
@@ -351,7 +376,7 @@ export function WizardHatPluginManagement() {
 			<Card className="p-6">
 				<h3 className="text-lg font-medium text-gray-900 mb-4">{ __( 'Marketplace' ) }</h3>
 
-				{ tokenValid ? (
+					{ repositoryPath ? (
 					<div className="space-y-4" ref={ searchRef }>
 						<TextControl
 							label={ __( 'Search plugins (type 3+ characters)' ) }
@@ -414,24 +439,22 @@ export function WizardHatPluginManagement() {
 								{ __( 'Available marketplace plugins:' ) } { allPremiumPlugins.length }
 							</div>
 						) }
+
+							{ ! loadingPremiumPlugins && allPremiumPlugins.length === 0 && (
+								<div className="text-sm text-gray-500">
+									{ __( 'No marketplace plugins found in repository.' ) }
+							</div>
+						) }
 					</div>
 				) : (
 					<div className="text-center py-8">
 						<p className="text-gray-600 mb-4">
-							{ __( 'Configure your GitHub token in the Tools tab to access the marketplace.' ) }
+								{ __(
+									'Configure your local all-plugins repository path to access the marketplace.'
+								) }
 						</p>
-						<Button
-							variant="secondary"
-							onClick={ () => {
-								// This would ideally navigate to the Tools tab
-								// For now, we'll just show a message
-								getIpcApi().showNotification( {
-									title: __( 'Tools Tab' ),
-									body: __( 'Please go to the Tools tab to configure your GitHub token.' ),
-								} );
-							} }
-						>
-							{ __( 'Go to Tools Tab' ) }
+							<Button variant="secondary" onClick={ () => setShowRepositorySetup( true ) }>
+								{ __( 'Configure Repository Path' ) }
 						</Button>
 					</div>
 				) }
@@ -523,7 +546,9 @@ export function WizardHatPluginManagement() {
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
 						<span>
-							{ __( 'Marketplace plugins require a valid GitHub token (configure in Tools tab)' ) }
+								{ __(
+									'Marketplace plugins require a local clone of the all-plugins repository (configure on first use)'
+								) }
 						</span>
 					</li>
 					<li className="flex items-start">
@@ -533,5 +558,6 @@ export function WizardHatPluginManagement() {
 				</ul>
 			</div>
 		</div>
+		</>
 	);
 }

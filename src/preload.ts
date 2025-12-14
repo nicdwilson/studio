@@ -137,9 +137,35 @@ const api: IpcApi = {
 	isStudioCliInstalled: () => ipcRendererInvoke( 'isStudioCliInstalled' ),
 	installStudioCli: () => ipcRendererInvoke( 'installStudioCli' ),
 	uninstallStudioCli: () => ipcRendererInvoke( 'uninstallStudioCli' ),
+	validateRepositoryPath: ( repositoryPath ) =>
+		ipcRendererInvoke( 'validateRepositoryPath', repositoryPath ),
+	saveRepositoryPath: ( repositoryPath ) =>
+		ipcRendererInvoke( 'saveRepositoryPath', repositoryPath ),
+	getRepositoryPath: () => ipcRendererInvoke( 'getRepositoryPath' ),
+	installPluginFromLocalRepo: ( options ) =>
+		ipcRendererInvoke( 'installPluginFromLocalRepo', options ),
+	getAvailablePluginsFromRepository: ( repositoryPath ) =>
+		ipcRendererInvoke( 'getAvailablePluginsFromRepository', repositoryPath ),
 };
 
-contextBridge.exposeInMainWorld( 'ipcApi', api );
+// Validate api object before exposing
+const apiKeys = Object.keys( api );
+const nullKeys = apiKeys.filter( ( key ) => api[ key as keyof typeof api ] === null || api[ key as keyof typeof api ] === undefined );
+if ( nullKeys.length > 0 ) {
+	console.error( 'IPC API has null/undefined handlers:', nullKeys );
+}
+
+try {
+	contextBridge.exposeInMainWorld( 'ipcApi', api );
+	console.log( 'IPC API exposed successfully with', apiKeys.length, 'handlers' );
+} catch ( error ) {
+	console.error( 'Failed to expose IPC API:', error );
+	// Expose a minimal API to prevent complete failure
+	contextBridge.exposeInMainWorld( 'ipcApi', {
+		getAppGlobals: () => ipcRenderer.invoke( 'getAppGlobals' ),
+		getSentryUserId: () => ipcRenderer.invoke( 'getSentryUserId' ),
+	} );
+}
 
 const subscribe = < T extends keyof IpcEvents >(
 	channel: T,
