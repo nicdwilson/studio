@@ -27,3 +27,17 @@ export function MySQLSupport() {
 export { MySQLCredentials } from './components/mysql-credentials';
 export { DatabaseTypeDisplay } from './components/database-type-display';
 export { MySQLCheckbox } from './components/mysql-checkbox';
+
+// Export hooks
+export { useMySQLState } from './hooks/use-mysql-state';
+
+// Export types (re-export from types module)
+export type { 
+	MySQLCredentials as MySQLCredentialsType, 
+	MySQLConnectionTestResult, 
+	MySQLDatabaseConfig, 
+	MySQLSiteConfig 
+} from './types';
+
+// Note: Database operations, wp-config manager, and site manager are only available in the main process
+// They should be imported directly in ipc-handlers.ts, not through this module index

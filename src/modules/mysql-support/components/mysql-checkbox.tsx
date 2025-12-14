@@ -28,6 +28,7 @@ export function MySQLCheckbox({ checked, onChange, disabled = false }: MySQLChec
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
 		const newValue = event.target.checked;
+		console.log( `[MySQL] MySQLCheckbox handleChange called with newValue: ${ newValue }` );
 		
 		if (newValue && !hasCredentials) {
 			// Show notification that credentials need to be configured
@@ -38,6 +39,7 @@ export function MySQLCheckbox({ checked, onChange, disabled = false }: MySQLChec
 			return;
 		}
 		
+		console.log( `[MySQL] MySQLCheckbox calling onChange with: ${ newValue }` );
 		onChange(newValue);
 	};
 

@@ -219,6 +219,10 @@ export function SiteDetailsProvider( { children }: SiteDetailsProviderProps ) {
 			setSelectedSiteId( tempSiteId ); // Set the temporary ID as the selected site
 
 			try {
+				console.log( `[MySQL] useSiteDetails createSite called with useMySQL: ${ useMySQL }` );
+				console.log( `[MySQL] useSiteDetails createSite parameter type: ${ typeof useMySQL }` );
+				console.log( `[MySQL] useSiteDetails createSite parameter value:`, useMySQL );
+				console.log( `[MySQL] useSiteDetails calling getIpcApi().createSite with useMySQL:`, useMySQL );
 				const newSite = await getIpcApi().createSite(
 					path,
 					siteName,

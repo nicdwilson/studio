@@ -24,8 +24,8 @@ const api: IpcApi = {
 	archiveSite: ( id, format ) => ipcRendererInvoke( 'archiveSite', id, format ),
 	exportSiteToPush: ( id ) => ipcRendererInvoke( 'exportSiteToPush', id ),
 	deleteSite: ( id, deleteFiles ) => ipcRendererInvoke( 'deleteSite', id, deleteFiles ),
-	createSite: ( path, name, wpVersion, customDomain, enableHttps ) =>
-		ipcRendererInvoke( 'createSite', path, name, wpVersion, customDomain, enableHttps ),
+	createSite: ( path, name, wpVersion, customDomain, enableHttps, siteId, useMySQL ) =>
+		ipcRendererInvoke( 'createSite', path, name, wpVersion, customDomain, enableHttps, siteId, useMySQL ),
 	updateSite: ( updatedSite ) => ipcRendererInvoke( 'updateSite', updatedSite ),
 	connectWpcomSites: ( ...args ) => ipcRendererInvoke( 'connectWpcomSites', ...args ),
 	disconnectWpcomSites: ( ...args ) => ipcRendererInvoke( 'disconnectWpcomSites', ...args ),

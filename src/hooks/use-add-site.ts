@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/electron/renderer';
 import { useI18n } from '@wordpress/react-i18n';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useImportExport } from 'src/hooks/use-import-export';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { generateCustomDomainFromSiteName, getDomainNameValidationError } from 'src/lib/domains';
@@ -31,6 +31,11 @@ export function useAddSite() {
 	const [ existingDomainNames, setExistingDomainNames ] = useState< string[] >( [] );
 	const [ enableHttps, setEnableHttps ] = useState( false );
 	const [ useMySQL, setUseMySQL ] = useState( false );
+	
+	// Add debugging for useMySQL state changes
+	useEffect(() => {
+		console.log( `[MySQL] useAddSite useMySQL state changed to: ${ useMySQL }` );
+	}, [useMySQL]);
 
 	const loadAllCustomDomains = useCallback( () => {
 		getIpcApi()
@@ -106,6 +111,7 @@ export function useAddSite() {
 			if ( useCustomDomain && ! customDomain ) {
 				usedCustomDomain = generateCustomDomainFromSiteName( siteName ?? '' );
 			}
+			console.log( `[MySQL] useAddSite createSite called with useMySQL: ${ useMySQL }` );
 			await createSite(
 				path,
 				siteName ?? '',

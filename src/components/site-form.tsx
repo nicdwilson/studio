@@ -268,6 +268,12 @@ export const SiteForm = ( {
 	useMySQL = false,
 	setUseMySQL,
 }: SiteFormProps ) => {
+	console.log( `[MySQL] SiteForm received useMySQL: ${ useMySQL }, setUseMySQL: ${ !! setUseMySQL }` );
+	
+	// Add debugging for when the component re-renders
+	useEffect(() => {
+		console.log( `[MySQL] SiteForm useEffect - useMySQL changed to: ${ useMySQL }` );
+	}, [useMySQL]);
 	const { __, isRTL } = useI18n();
 	const locale = useI18nLocale();
 	const { data: isCertificateTrusted } = useCheckCertificateTrustQuery();
