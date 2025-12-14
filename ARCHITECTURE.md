@@ -16,7 +16,7 @@ Woo-Happy-Studio is a modular extension of WordPress.com Studio that adds WooCom
 
 ```
 src/modules/
-├── woo-commerce/           # WooCommerce functionality
+├── woocommerce/           # WooCommerce functionality
 │   ├── components/         # WooCommerce UI components
 │   │   ├── wizard-hat-overview.tsx
 │   │   ├── wizard-hat-shop-config.tsx
@@ -46,7 +46,7 @@ The primary integration point is `src/components/site-content-tabs.tsx`, which:
 3. Handles module lifecycle and state management
 
 ```typescript
-import { WizardHatToolkit } from 'src/modules/woo-commerce';
+import { WizardHatToolkit } from 'src/modules/woocommerce';
 import { MySQLSupport } from 'src/modules/mysql-support';
 
 // In the render method:
@@ -176,7 +176,7 @@ Modules are integrated through the Studio tab system:
 
 ### From Old Architecture
 The project successfully migrated from:
-- `src/modules/wizard-hat-toolkit/` → `src/modules/woo-commerce/`
+- `src/modules/wizard-hat-toolkit/` → `src/modules/woocommerce/`
 - `src/modules/mysql-credentials/` → `src/modules/mysql-support/`
 
 ### Benefits Achieved
