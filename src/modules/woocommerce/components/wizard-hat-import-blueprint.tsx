@@ -57,10 +57,10 @@ export function WizardHatImportBlueprint() {
 		return (
 			<div className="space-y-8">
 				<div className="max-w-3xl px-8">
-					<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Import Blueprint' ) }</h2>
-					<p className="text-gray-600 mb-6">
-						{ __( 'Please select a site to import a WooCommerce blueprint.' ) }
-					</p>
+				<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Import Woo Blueprint' ) }</h2>
+				<p className="text-gray-600 mb-6">
+					{ __( 'Please select a site to import a Woo Blueprint.' ) }
+				</p>
 				</div>
 			</div>
 		);
@@ -68,7 +68,7 @@ export function WizardHatImportBlueprint() {
 
 	const handleFileSelect = async () => {
 		try {
-			const result = await getIpcApi().showOpenFileDialog( __( 'Select Blueprint File' ), '', [
+			const result = await getIpcApi().showOpenFileDialog( __( 'Select Woo Blueprint File' ), '', [
 				{ name: 'JSON Files', extensions: [ 'json' ] },
 			] );
 
@@ -134,7 +134,7 @@ export function WizardHatImportBlueprint() {
 
 			// Basic validation
 			if ( ! blueprint.steps || ! Array.isArray( blueprint.steps ) ) {
-				throw new Error( __( 'Invalid blueprint format: missing or invalid steps array' ) );
+				throw new Error( __( 'Invalid Woo Blueprint format: missing or invalid steps array' ) );
 			}
 
 			// Check for required WooCommerce version
@@ -145,16 +145,16 @@ export function WizardHatImportBlueprint() {
 			if ( ! hasWooCommerce ) {
 				setError(
 					__(
-						'This blueprint does not include WooCommerce installation. Please ensure WooCommerce is already installed on your site.'
+						'This Woo Blueprint does not include WooCommerce installation. Please ensure WooCommerce is already installed on your site.'
 					)
 				);
 			}
 
 			setBlueprintData( blueprint );
 		} catch ( error ) {
-			console.error( 'Error validating blueprint:', error );
+			console.error( 'Error validating Woo Blueprint:', error );
 			setError(
-				error instanceof Error ? error.message : __( 'Failed to validate blueprint file' )
+				error instanceof Error ? error.message : __( 'Failed to validate Woo Blueprint file' )
 			);
 			setBlueprintData( null );
 		} finally {
@@ -182,15 +182,15 @@ export function WizardHatImportBlueprint() {
 				setImportResults( result.results || [] );
 				getIpcApi().showNotification( {
 					title: __( 'Success' ),
-					body: __( 'Blueprint imported successfully!' ),
+					body: __( 'Woo Blueprint imported successfully!' ),
 				} );
 			} else {
 				setError( result.error || __( 'Import failed' ) );
 				setImportResults( result.results || [] );
 			}
 		} catch ( error ) {
-			console.error( 'Error importing blueprint:', error );
-			setError( error instanceof Error ? error.message : __( 'Failed to import blueprint' ) );
+			console.error( 'Error importing Woo Blueprint:', error );
+			setError( error instanceof Error ? error.message : __( 'Failed to import Woo Blueprint' ) );
 		} finally {
 			setIsImporting( false );
 		}
@@ -231,10 +231,10 @@ export function WizardHatImportBlueprint() {
 	return (
 		<div className="space-y-8">
 			<div className="max-w-3xl px-8">
-				<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Import Blueprint' ) }</h2>
+				<h2 className="text-xl font-semibold text-gray-900 mb-4">{ __( 'Import Woo Blueprint' ) }</h2>
 				<p className="text-gray-600 mb-6">
 					{ __(
-						'Import a WooCommerce blueprint to automatically configure your site with plugins, themes, and settings.'
+						'Import a Woo Blueprint to automatically configure your site with plugins, themes, and settings.'
 					) }
 				</p>
 			</div>
@@ -242,7 +242,7 @@ export function WizardHatImportBlueprint() {
 			{ /* File Selection */ }
 			<Card className="p-6">
 				<h3 className="text-lg font-medium text-gray-900 mb-4">
-					{ __( 'Select Blueprint File' ) }
+					{ __( 'Select Woo Blueprint File' ) }
 				</h3>
 
 				<div className="space-y-4">
@@ -251,7 +251,7 @@ export function WizardHatImportBlueprint() {
 						onClick={ handleFileSelect }
 						disabled={ isValidating || isImporting }
 					>
-						{ selectedFile ? __( 'Change File' ) : __( 'Choose Blueprint File' ) }
+						{ selectedFile ? __( 'Change File' ) : __( 'Choose Woo Blueprint File' ) }
 					</Button>
 
 					{ selectedFile && (
@@ -263,16 +263,16 @@ export function WizardHatImportBlueprint() {
 					{ isValidating && (
 						<div className="flex items-center gap-2 text-sm text-gray-600">
 							<Spinner />
-							{ __( 'Validating blueprint file...' ) }
+							{ __( 'Validating Woo Blueprint file...' ) }
 						</div>
 					) }
 				</div>
 			</Card>
 
-			{ /* Blueprint Summary */ }
+			{ /* Woo Blueprint Summary */ }
 			{ blueprintData && stepSummary && (
 				<Card className="p-6">
-					<h3 className="text-lg font-medium text-gray-900 mb-4">{ __( 'Blueprint Summary' ) }</h3>
+					<h3 className="text-lg font-medium text-gray-900 mb-4">{ __( 'Woo Blueprint Summary' ) }</h3>
 
 					<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 						<div className="text-center p-3 bg-blue-50 rounded-lg">
@@ -318,7 +318,7 @@ export function WizardHatImportBlueprint() {
 								{ __( 'Ready to Import' ) }
 							</h3>
 							<p className="text-sm text-gray-600">
-								{ __( 'This will install and configure all components in the blueprint.' ) }
+								{ __( 'This will install and configure all components in the Woo Blueprint.' ) }
 							</p>
 						</div>
 						<Button variant="primary" onClick={ handleImport } disabled={ isImporting }>
@@ -328,7 +328,7 @@ export function WizardHatImportBlueprint() {
 									{ __( 'Importing...' ) }
 								</div>
 							) : (
-								__( 'Import Blueprint' )
+								__( 'Import Woo Blueprint' )
 							) }
 						</Button>
 					</div>
@@ -384,7 +384,7 @@ export function WizardHatImportBlueprint() {
 					<li className="flex items-start">
 						<span className="font-medium mr-2">•</span>
 						<span>
-							{ __( 'Blueprints can install WordPress.org and premium WooCommerce plugins' ) }
+							{ __( 'Woo Blueprints can install WordPress.org and premium WooCommerce plugins' ) }
 						</span>
 					</li>
 					<li className="flex items-start">

@@ -44,7 +44,7 @@ const tabs: WizardHatTab[] = [
 	},
 	{
 		name: 'import-blueprint',
-		label: __( 'Import Blueprint' ),
+		label: __( 'Import Woo Blueprint' ),
 		component: WizardHatImportBlueprint,
 	},
 ];
