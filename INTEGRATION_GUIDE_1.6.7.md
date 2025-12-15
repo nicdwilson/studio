@@ -80,9 +80,13 @@ After adding the additional files, we needed to integrate them into the Studio a
 - `getRepositoryPath` - Retrieves saved repository path
 - `installPluginFromLocalRepo` - Installs plugin from local repository
 - `getAvailablePluginsFromRepository` - Lists available plugins from repository
+- `showOpenFileDialog` - Opens file selection dialog (for blueprint files)
+- `getFileContent` - Reads file content with UTF-8 encoding and BOM removal
+- `importWooCommerceBlueprint` - Imports and executes WooCommerce blueprint steps
 
 **Key changes**:
 - Fixed `getAppGlobals` signature to include `_event: IpcMainInvokeEvent` parameter
+- Updated `installPluginFromLocalRepo` to copy zip file to site's filesystem before installation (WP-CLI runs in PHP WASM and cannot access host filesystem paths)
 - Updated `installPluginFromLocalRepo` to use `server.executeWpCliCommand()` directly instead of calling `executeWPCLiInline()` (to avoid circular dependencies)
 - Fixed syntax error in `validateRepositoryPath` (extra closing brace)
 
@@ -208,6 +212,24 @@ const result = await server.executeWpCliCommand(args);
 - Path stored in user data (`allPluginsRepositoryPath`)
 - Validates path contains `product-packages` directory
 - No GitHub token required
+- User prompted to configure path on first use
+- Path validated synchronously (awaits IPC result directly)
+
+### Plugin Installation Workflow
+
+**Process**:
+1. User selects plugins from quick install checkboxes or search dropdown
+2. User clicks "Install Selected Plugins"
+3. For premium plugins:
+   - System checks if repository path is configured
+   - If not, shows repository setup modal
+   - Once configured, proceeds with installation
+4. For each plugin:
+   - **Premium plugins**: Zip file copied from repository to site's root directory
+   - WP-CLI installs using relative path (accessible in PHP WASM)
+   - Temporary zip file cleaned up after installation
+5. Successfully installed plugins are removed from selection
+6. Failed plugins remain selected for retry
 
 ### IPC Handler Pattern
 
@@ -232,7 +254,6 @@ src/modules/
 │   │   ├── wizard-hat-plugin-management.tsx
 │   │   ├── wizard-hat-tools.tsx
 │   │   ├── wizard-hat-import-blueprint.tsx
-│   │   ├── wizard-hat-jurassic-tube.tsx
 │   │   └── repository-setup.tsx
 │   └── index.tsx
 ├── mysql-support/         # MySQL functionality
@@ -252,11 +273,22 @@ After integration, verify:
 - [ ] All tabs render correctly
 - [ ] Wizard Hat Toolkit tab appears and functions
 - [ ] Repository setup modal works
+- [ ] Repository path validation completes without hanging
+- [ ] Plugin search shows all matching results (not limited to 10)
 - [ ] Plugin installation from local repo works
+- [ ] Plugin installation copies zip to site filesystem correctly
+- [ ] Temporary zip files are cleaned up after installation
+- [ ] Selected plugins are cleared from checkboxes after successful installation
+- [ ] Failed plugins remain selected for retry
+- [ ] File selection dialog works for blueprint files
+- [ ] Blueprint file content is read correctly
+- [ ] Blueprint import executes all steps correctly
+- [ ] Blueprint import shows results for each step
 - [ ] WP-CLI commands execute correctly
 - [ ] No React Hooks violations
 - [ ] No console errors in renderer
 - [ ] IPC handlers all registered correctly
+- [ ] Jurassic Tube tab is not visible (deprecated)
 
 ## Steps for Future Integration (v1.6.7 Final)
 
@@ -322,11 +354,131 @@ If you encounter "object null is not iterable" or similar module loading errors:
 ### Modified Files
 - `src/components/site-content-tabs.tsx` - Added WizardHatToolkit import and render
 - `src/hooks/use-content-tabs.tsx` - Added wizard-hat-toolkit tab definition
-- `src/ipc-handlers.ts` - Added repository path handlers, fixed getAppGlobals
-- `src/preload.ts` - Added IPC API exposures for new handlers
+- `src/ipc-handlers.ts` - Added repository path handlers, file dialog handlers, blueprint import handler, fixed getAppGlobals, fixed plugin installation
+- `src/preload.ts` - Added IPC API exposures for all new handlers
 - `src/storage/storage-types.ts` - Added allPluginsRepositoryPath field
 - `src/modules/cli/lib/ipc-handlers.ts` - Added IpcMainInvokeEvent parameter
 - `src/index.ts` - Added defensive checks in setupIpc
+- `src/modules/woocommerce/components/repository-setup.tsx` - Fixed validation to await IPC result
+- `src/modules/woocommerce/components/wizard-hat-plugin-management.tsx` - Removed search limit, added plugin deselection after install
+- `src/modules/woocommerce/components/wizard-hat-import-blueprint.tsx` - Uses new file dialog and blueprint import handlers
+- `src/modules/woocommerce/index.tsx` - Removed Jurassic Tube tab
+
+### Removed Files
+- `src/modules/woocommerce/components/wizard-hat-jurassic-tube.tsx` - Deprecated functionality
+
+## Additional Fixes and Improvements (Post-Integration)
+
+### Issue 6: Repository Path Validation Hanging
+
+**Symptom**: App hangs when clicking "Validate" button in repository setup modal.
+
+**Root Cause**: Component was calling `validateRepositoryPath` IPC handler but not awaiting the result, and was listening for a `repository-path-validated` event that is never sent.
+
+**Fix**: Updated `RepositorySetup` component to await the IPC result directly:
+```typescript
+// Before
+getIpcApi().validateRepositoryPath( repositoryPath );
+// Listened for 'repository-path-validated' event (never sent)
+
+// After
+const result = await getIpcApi().validateRepositoryPath( repositoryPath );
+if ( result.valid ) {
+  setValidationSuccess( true );
+  // ... handle result
+}
+```
+
+**Lesson**: IPC handlers that return Promises should be awaited directly, not listened to as events.
+
+### Issue 7: Plugin Search Limited to 10 Results
+
+**Symptom**: Plugin search dropdown only shows 10 results, missing plugins like "WooCommerce Subscriptions".
+
+**Root Cause**: `.slice( 0, 10 )` limit in `filteredPremiumPlugins` useMemo.
+
+**Fix**: Removed the limit to show all matching plugins:
+```typescript
+// Before
+return allPremiumPlugins
+  .filter( ... )
+  .slice( 0, 10 );
+
+// After
+return allPremiumPlugins
+  .filter( ... );
+// No limit - dropdown has max-height and scrolls
+```
+
+### Issue 8: Plugin Installation from Local Repo Failing
+
+**Symptom**: Error "Invalid plugin slug" when installing plugins from local repository.
+
+**Root Cause**: WP-CLI runs in PHP WASM environment and cannot access host filesystem paths directly. The absolute path `/Users/.../all-plugins/product-packages/.../plugin.zip` was not accessible.
+
+**Fix**: Copy zip file to site's filesystem before installation:
+```typescript
+// Copy zip to site root (mounted in PHP WASM)
+const tempZipPath = nodePath.join( sitePath, tempZipName );
+await fsPromises.copyFile( pluginZipPath, tempZipPath );
+
+// Use relative path for WP-CLI
+const result = await server.executeWpCliCommand(
+  `plugin install "${ tempZipName }" --activate --force`
+);
+
+// Clean up temp file
+await fsPromises.unlink( tempZipPath );
+```
+
+**Lesson**: Files must be within the mounted filesystem for PHP WASM to access them. Use relative paths from WordPress root.
+
+### Issue 9: Selected Plugins Not Cleared After Installation
+
+**Symptom**: Checkboxes remain checked after successful plugin installation.
+
+**Root Cause**: `selectedPlugins` state was not updated after installation completed.
+
+**Fix**: Clear successfully installed plugins from selection, keep failed ones selected:
+```typescript
+// After installation completes
+const failedPluginValues = pluginsToInstall
+  .filter( ( plugin ) =>
+    results.failed.some( ( failed ) => failed.plugin === plugin.label )
+  )
+  .map( ( plugin ) => plugin.value );
+
+setSelectedPlugins( failedPluginValues );
+```
+
+### Issue 10: Missing File Dialog and Blueprint Import Functions
+
+**Symptom**: "Choose Blueprint File" button fails with `showOpenFileDialog is not a function`, and blueprint import fails with `importWooCommerceBlueprint is not a function`.
+
+**Root Cause**: Missing IPC handlers for file selection and blueprint import functionality.
+
+**Fix**: Added three new IPC handlers:
+1. `showOpenFileDialog` - Opens file selection dialog with filters (similar to `showOpenFolderDialog` but for files)
+2. `getFileContent` - Reads file content with UTF-8 encoding and BOM removal
+3. `importWooCommerceBlueprint` - Imports and executes blueprint steps (installPlugin, installTheme, setSiteOptions, runSql)
+
+**Implementation Details**:
+- `showOpenFileDialog` accepts title, default path, and optional file filters
+- `getFileContent` handles BOM removal automatically
+- `importWooCommerceBlueprint` executes each blueprint step sequentially and returns results for each step
+- Premium plugins are installed from local repository if configured, otherwise from WordPress.org
+
+### Deprecation: Jurassic Tube
+
+**Change**: Removed Jurassic Tube functionality as it's no longer required.
+
+**Files Modified**:
+- Removed `src/modules/woocommerce/components/wizard-hat-jurassic-tube.tsx`
+- Removed `'jurassic-tube'` from `WizardHatTabName` type
+- Removed tab from tabs array in `src/modules/woocommerce/index.tsx`
+- Removed reference from "Getting Started" section in overview component
+
+**Note**: The "jurassic-ninja" API endpoints in `src/stores/wpcom-api.ts` remain as they're for snapshots/preview sites, not the tunneling feature.
 
 ## Version Information
 
@@ -334,8 +486,9 @@ If you encounter "object null is not iterable" or similar module loading errors:
 - **Custom Features From**: v1.5.5-woo-mysql
 - **Integration Date**: 2024-12-14
 - **Status**: Working
+- **Latest Updates**: 2024-12-15
 
 ---
 
-**Last Updated**: 2024-12-14
+**Last Updated**: 2024-12-15
 

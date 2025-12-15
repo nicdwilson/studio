@@ -460,6 +460,59 @@ export async function showSaveAsDialog( event: IpcMainInvokeEvent, options: Save
 	return filePath;
 }
 
+export interface FileDialogResponse {
+	path: string;
+}
+
+export async function getFileContent(
+	_event: IpcMainInvokeEvent,
+	filePath: string
+): Promise< string > {
+	try {
+		// Read file as UTF-8
+		let content = await fsPromises.readFile( filePath, 'utf-8' );
+
+		// Remove BOM (Byte Order Mark) if present
+		content = content.replace( /^\uFEFF/, '' );
+
+		return content;
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		writeLogToFile( 'erro', `Error reading file content: ${ errorMessage }` );
+		throw new Error( sprintf( __( 'Failed to read file: %s' ), errorMessage ) );
+	}
+}
+
+export async function showOpenFileDialog(
+	event: IpcMainInvokeEvent,
+	title: string,
+	defaultDialogPath: string,
+	filters?: Array< { name: string; extensions: string[] } >
+): Promise< FileDialogResponse | null > {
+	const parentWindow = BrowserWindow.fromWebContents( event.sender );
+	if ( ! parentWindow ) {
+		throw new Error(
+			`No window found for sender of showOpenFileDialog message: ${ event.frameId }`
+		);
+	}
+
+	const { canceled, filePaths } = await dialog.showOpenDialog( parentWindow, {
+		title,
+		defaultPath: defaultDialogPath !== '' ? defaultDialogPath : DEFAULT_SITE_PATH,
+		properties: [ 'openFile' ],
+		filters: filters || [
+			{ name: 'All Files', extensions: [ '*' ] },
+		],
+	} );
+	if ( canceled || ! filePaths || filePaths.length === 0 ) {
+		return null;
+	}
+
+	return {
+		path: filePaths[ 0 ],
+	};
+}
+
 export async function showOpenFolderDialog(
 	event: IpcMainInvokeEvent,
 	title: string,
@@ -1593,6 +1646,240 @@ export async function installPluginFromLocalRepo(
 	} catch ( error ) {
 		const errorMessage = error instanceof Error ? error.message : String( error );
 		writeLogToFile( 'erro', `Error installing plugin from local repo: ${ errorMessage }` );
+		return {
+			success: false,
+			error: errorMessage,
+		};
+	}
+}
+
+export async function importWooCommerceBlueprint(
+	_event: IpcMainInvokeEvent,
+	options: {
+		siteId: string;
+		blueprintPath: string;
+		githubToken?: string;
+	}
+): Promise< {
+	success: boolean;
+	results?: Array< { step: string; success: boolean; message: string } >;
+	error?: string;
+} > {
+	try {
+		const { siteId, blueprintPath } = options;
+
+		// Get site server
+		const server = SiteServer.get( siteId );
+		if ( ! server ) {
+			return {
+				success: false,
+				error: __( 'Site not found' ),
+			};
+		}
+
+		// Ensure site is running
+		if ( ! server.details.running ) {
+			await startServer( _event, server.details.id );
+		}
+
+		// Read blueprint file
+		const blueprintContent = await getFileContent( _event, blueprintPath );
+		const blueprint = JSON.parse( blueprintContent ) as {
+			steps: Array< {
+				step: string;
+				pluginData?: { resource: string; slug: string };
+				themeData?: { resource: string; slug: string };
+				options?: Record< string, unknown >;
+				sql?: { resource: string; name?: string; contents?: string };
+			} >;
+		};
+
+		if ( ! blueprint.steps || ! Array.isArray( blueprint.steps ) ) {
+			return {
+				success: false,
+				error: __( 'Invalid blueprint format: missing or invalid steps array' ),
+			};
+		}
+
+		const results: Array< { step: string; success: boolean; message: string } > = [];
+		const userData = await loadUserData();
+		const repositoryPath = userData.allPluginsRepositoryPath;
+
+		// Execute each step
+		for ( const step of blueprint.steps ) {
+			try {
+				switch ( step.step ) {
+					case 'installPlugin': {
+						if ( ! step.pluginData ) {
+							results.push( {
+								step: 'installPlugin',
+								success: false,
+								message: __( 'Missing plugin data' ),
+							} );
+							continue;
+						}
+
+						const pluginSlug = step.pluginData.slug;
+						const isPremium = step.pluginData.resource?.includes( 'github.com' ) || false;
+
+						if ( isPremium && repositoryPath ) {
+							// Install from local repository
+							const installResult = await installPluginFromLocalRepo( _event, {
+								siteId,
+								repositoryPath,
+								pluginName: pluginSlug,
+							} );
+
+							results.push( {
+								step: `installPlugin:${ pluginSlug }`,
+								success: installResult.success,
+								message: installResult.success
+									? sprintf( __( 'Installed %s' ), pluginSlug )
+									: installResult.error || __( 'Failed to install plugin' ),
+							} );
+						} else {
+							// Install from WordPress.org
+							const wpCliResult = await server.executeWpCliCommand(
+								`plugin install ${ pluginSlug } --activate`
+							);
+
+							results.push( {
+								step: `installPlugin:${ pluginSlug }`,
+								success: wpCliResult.exitCode === 0,
+								message:
+									wpCliResult.exitCode === 0
+										? sprintf( __( 'Installed %s' ), pluginSlug )
+										: wpCliResult.stderr || __( 'Failed to install plugin' ),
+							} );
+						}
+						break;
+					}
+
+					case 'installTheme': {
+						if ( ! step.themeData ) {
+							results.push( {
+								step: 'installTheme',
+								success: false,
+								message: __( 'Missing theme data' ),
+							} );
+							continue;
+						}
+
+						const themeSlug = step.themeData.slug;
+						const wpCliResult = await server.executeWpCliCommand(
+							`theme install ${ themeSlug } --activate`
+						);
+
+						results.push( {
+							step: `installTheme:${ themeSlug }`,
+							success: wpCliResult.exitCode === 0,
+							message:
+								wpCliResult.exitCode === 0
+									? sprintf( __( 'Installed theme %s' ), themeSlug )
+									: wpCliResult.stderr || __( 'Failed to install theme' ),
+						} );
+						break;
+					}
+
+					case 'setSiteOptions': {
+						if ( ! step.options ) {
+							results.push( {
+								step: 'setSiteOptions',
+								success: false,
+								message: __( 'Missing options data' ),
+							} );
+							continue;
+						}
+
+						const optionEntries = Object.entries( step.options );
+						const optionResults: string[] = [];
+
+						for ( const [ key, value ] of optionEntries ) {
+							const wpCliResult = await server.executeWpCliCommand(
+								`option update ${ key } '${ JSON.stringify( value ) }'`
+							);
+
+							if ( wpCliResult.exitCode === 0 ) {
+								optionResults.push( sprintf( __( 'Set %s' ), key ) );
+							} else {
+								optionResults.push(
+									sprintf( __( 'Failed to set %s: %s' ), key, wpCliResult.stderr || '' )
+								);
+							}
+						}
+
+						results.push( {
+							step: 'setSiteOptions',
+							success: optionResults.every( ( r ) => ! r.includes( 'Failed' ) ),
+							message: optionResults.join( ', ' ),
+						} );
+						break;
+					}
+
+					case 'runSql': {
+						if ( ! step.sql ) {
+							results.push( {
+								step: 'runSql',
+								success: false,
+								message: __( 'Missing SQL data' ),
+							} );
+							continue;
+						}
+
+						const sqlQuery = step.sql.contents || step.sql.resource || '';
+						if ( ! sqlQuery ) {
+							results.push( {
+								step: 'runSql',
+								success: false,
+								message: __( 'Empty SQL query' ),
+							} );
+							continue;
+						}
+
+						// Execute SQL using WP-CLI db query
+						const wpCliResult = await server.executeWpCliCommand(
+							`db query "${ sqlQuery.replace( /"/g, '\\"' ) }"`
+						);
+
+						results.push( {
+							step: 'runSql',
+							success: wpCliResult.exitCode === 0,
+							message:
+								wpCliResult.exitCode === 0
+									? __( 'SQL query executed successfully' )
+									: wpCliResult.stderr || __( 'Failed to execute SQL query' ),
+						} );
+						break;
+					}
+
+					default:
+						results.push( {
+							step: step.step,
+							success: false,
+							message: sprintf( __( 'Unknown step type: %s' ), step.step ),
+						} );
+				}
+			} catch ( stepError ) {
+				results.push( {
+					step: step.step,
+					success: false,
+					message:
+						stepError instanceof Error
+							? stepError.message
+							: sprintf( __( 'Error executing step: %s' ), String( stepError ) ),
+				} );
+			}
+		}
+
+		const allSuccessful = results.every( ( r ) => r.success );
+		return {
+			success: allSuccessful,
+			results,
+			error: allSuccessful ? undefined : __( 'Some steps failed during import' ),
+		};
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		writeLogToFile( 'erro', `Error importing WooCommerce blueprint: ${ errorMessage }` );
 		return {
 			success: false,
 			error: errorMessage,

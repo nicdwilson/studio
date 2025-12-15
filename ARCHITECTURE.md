@@ -23,7 +23,7 @@ src/modules/
 │   │   ├── wizard-hat-plugin-management.tsx
 │   │   ├── wizard-hat-tools.tsx
 │   │   ├── wizard-hat-import-blueprint.tsx
-│   │   └── wizard-hat-jurassic-tube.tsx
+│   │   └── repository-setup.tsx
 │   └── index.tsx          # Main module entry point
 ├── mysql-support/          # MySQL functionality
 │   ├── components/         # MySQL UI components
@@ -86,7 +86,7 @@ Provides comprehensive WooCommerce toolkit functionality including:
 - `WizardHatPluginManagement`: Plugin management tools
 - `WizardHatTools`: Development and utility tools
 - `WizardHatImportBlueprint`: Import/export functionality
-- `WizardHatJurassicTube`: Advanced WooCommerce features
+- `RepositorySetup`: Modal for configuring local all-plugins repository path
 
 ## MySQL Support Module
 

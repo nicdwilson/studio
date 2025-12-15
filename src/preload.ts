@@ -57,8 +57,11 @@ const api: IpcApi = {
 	openSiteURL: ( id, relativeURL = '', { autoLogin = true } = {} ) =>
 		ipcRendererSend( 'openSiteURL', id, relativeURL, { autoLogin } ),
 	openURL: ( url ) => ipcRendererSend( 'openURL', url ),
+	showOpenFileDialog: ( title, defaultDialogPath, filters ) =>
+		ipcRendererInvoke( 'showOpenFileDialog', title, defaultDialogPath, filters ),
 	showOpenFolderDialog: ( title, defaultDialogPath ) =>
 		ipcRendererInvoke( 'showOpenFolderDialog', title, defaultDialogPath ),
+	getFileContent: ( filePath ) => ipcRendererInvoke( 'getFileContent', filePath ),
 	isCATrusted: () => ipcRenderer.invoke( 'isCATrusted' ),
 	trustCertificate: () => ipcRenderer.invoke( 'trustCertificate' ),
 	showSaveAsDialog: ( options ) => ipcRendererInvoke( 'showSaveAsDialog', options ),
@@ -146,6 +149,8 @@ const api: IpcApi = {
 		ipcRendererInvoke( 'installPluginFromLocalRepo', options ),
 	getAvailablePluginsFromRepository: ( repositoryPath ) =>
 		ipcRendererInvoke( 'getAvailablePluginsFromRepository', repositoryPath ),
+	importWooCommerceBlueprint: ( options ) =>
+		ipcRendererInvoke( 'importWooCommerceBlueprint', options ),
 };
 
 // Validate api object before exposing
