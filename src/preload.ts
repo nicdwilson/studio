@@ -65,6 +65,7 @@ const api: IpcApi = {
 	isCATrusted: () => ipcRenderer.invoke( 'isCATrusted' ),
 	trustCertificate: () => ipcRenderer.invoke( 'trustCertificate' ),
 	showSaveAsDialog: ( options ) => ipcRendererInvoke( 'showSaveAsDialog', options ),
+	writeFile: ( filePath, content ) => ipcRendererInvoke( 'writeFile', filePath, content ),
 	saveUserLocale: ( locale ) => ipcRendererInvoke( 'saveUserLocale', locale ),
 	getSentryUserId: () => ipcRendererInvoke( 'getSentryUserId' ),
 	getUserLocale: () => ipcRendererInvoke( 'getUserLocale' ),

@@ -48,6 +48,7 @@ import { simplifyErrorForDisplay } from 'src/lib/error-formatting';
 import { buildFeatureFlags } from 'src/lib/feature-flags';
 import { sanitizeFolderName } from 'src/lib/generate-site-name';
 import { getImageData } from 'src/lib/get-image-data';
+import { convertMySqlToSqlite } from 'src/lib/sqlite-conversion';
 import { getSiteUrl } from 'src/lib/get-site-url';
 import { exportBackup } from 'src/lib/import-export/export/export-manager';
 import { ExportOptions } from 'src/lib/import-export/export/types';
@@ -462,6 +463,24 @@ export async function showSaveAsDialog( event: IpcMainInvokeEvent, options: Save
 
 export interface FileDialogResponse {
 	path: string;
+}
+
+export async function writeFile(
+	_event: IpcMainInvokeEvent,
+	filePath: string,
+	content: string
+): Promise< { success: boolean; error?: string } > {
+	try {
+		await fsPromises.writeFile( filePath, content, 'utf-8' );
+		return { success: true };
+	} catch ( error ) {
+		const errorMessage = error instanceof Error ? error.message : String( error );
+		writeLogToFile( 'erro', `Error writing file: ${ errorMessage }` );
+		return {
+			success: false,
+			error: errorMessage,
+		};
+	}
 }
 
 export async function getFileContent(
@@ -1721,6 +1740,7 @@ export async function importWooCommerceBlueprint(
 
 						const pluginSlug = step.pluginData.slug;
 						const isPremium = step.pluginData.resource?.includes( 'github.com' ) || false;
+						let installSuccess = false;
 
 						if ( isPremium && repositoryPath ) {
 							// Install from local repository
@@ -1730,6 +1750,7 @@ export async function importWooCommerceBlueprint(
 								pluginName: pluginSlug,
 							} );
 
+							installSuccess = installResult.success;
 							results.push( {
 								step: `installPlugin:${ pluginSlug }`,
 								success: installResult.success,
@@ -1739,10 +1760,14 @@ export async function importWooCommerceBlueprint(
 							} );
 						} else {
 							// Install from WordPress.org
+							// For WooCommerce, don't skip plugins during activation so activation hooks run
+							const skipPlugins = pluginSlug === 'woocommerce' ? false : true;
 							const wpCliResult = await server.executeWpCliCommand(
-								`plugin install ${ pluginSlug } --activate`
+								`plugin install ${ pluginSlug } --activate`,
+								{ skipPluginsAndThemes: skipPlugins }
 							);
 
+							installSuccess = wpCliResult.exitCode === 0;
 							results.push( {
 								step: `installPlugin:${ pluginSlug }`,
 								success: wpCliResult.exitCode === 0,
@@ -1751,6 +1776,108 @@ export async function importWooCommerceBlueprint(
 										? sprintf( __( 'Installed %s' ), pluginSlug )
 										: wpCliResult.stderr || __( 'Failed to install plugin' ),
 							} );
+						}
+
+						// If WooCommerce was successfully installed, trigger database setup
+						if ( installSuccess && pluginSlug === 'woocommerce' ) {
+							try {
+								// Trigger WooCommerce database installation manually using PHP
+								// Load WooCommerce and trigger database creation
+								const dbSetupPhpCode = `<?php
+// Load WordPress
+require_once 'wp-load.php';
+
+// Manually load WooCommerce plugin file
+$woocommerce_file = WP_PLUGIN_DIR . '/woocommerce/woocommerce.php';
+if ( ! file_exists( $woocommerce_file ) ) {
+	echo 'WooCommerce plugin file not found at: ' . $woocommerce_file;
+	exit( 1 );
+}
+
+// Include WooCommerce main file
+include_once $woocommerce_file;
+
+// Check if WC_Install class exists
+if ( ! class_exists( 'WC_Install' ) ) {
+	echo 'WC_Install class not found. WooCommerce may not be properly installed.';
+	exit( 1 );
+}
+
+// Create WooCommerce database tables
+try {
+	WC_Install::create_tables();
+	WC_Install::create_roles();
+	
+	// Get WooCommerce version and update database version option
+	if ( function_exists( 'WC' ) ) {
+		$wc = WC();
+		if ( is_object( $wc ) && property_exists( $wc, 'version' ) ) {
+			update_option( 'woocommerce_db_version', $wc->version );
+		}
+	}
+	
+	echo 'WooCommerce database tables created successfully';
+} catch ( Exception $e ) {
+	echo 'Error creating WooCommerce tables: ' . $e->getMessage();
+	exit( 1 );
+}
+`;
+
+								// Write PHP code to temp file
+								const tempPhpFileName = `woo_db_setup_${ Date.now() }.php`;
+								const tempPhpPath = nodePath.join( server.details.path, tempPhpFileName );
+								await fsPromises.writeFile( tempPhpPath, dbSetupPhpCode, 'utf-8' );
+
+								try {
+									// Execute the PHP file using wp eval
+									// Don't skip plugins so WooCommerce can load properly
+									const evalCommand = `eval 'require "${ tempPhpFileName }";'`;
+									const wcUpdateResult = await server.executeWpCliCommand(
+										evalCommand,
+										{ skipPluginsAndThemes: false }
+									);
+
+									if ( wcUpdateResult.exitCode === 0 ) {
+										results.push( {
+											step: 'woocommerce_db_setup',
+											success: true,
+											message: __( 'WooCommerce database tables created' ),
+										} );
+									} else {
+										// Log warning but don't fail the import
+										const errorMsg = [ wcUpdateResult.stderr, wcUpdateResult.stdout ]
+											.filter( ( msg ) => msg && msg.trim() )
+											.join( ' | ' ) || __( 'Unknown error' );
+										results.push( {
+											step: 'woocommerce_db_setup',
+											success: false,
+											message: sprintf( __( 'WooCommerce database update warning: %s' ), errorMsg ),
+										} );
+									}
+								} finally {
+									// Clean up PHP file
+									try {
+										if ( await pathExists( tempPhpPath ) ) {
+											await fsPromises.unlink( tempPhpPath );
+										}
+									} catch ( cleanupError ) {
+										writeLogToFile(
+											'warn',
+											`Failed to cleanup temp WooCommerce DB setup file: ${ tempPhpPath }`
+										);
+									}
+								}
+							} catch ( wcError ) {
+								// Log error but don't fail the import
+								results.push( {
+									step: 'woocommerce_db_setup',
+									success: false,
+									message: sprintf(
+										__( 'Failed to run WooCommerce database update: %s' ),
+										wcError instanceof Error ? wcError.message : String( wcError )
+									),
+								} );
+							}
 						}
 						break;
 					}
@@ -1795,15 +1922,139 @@ export async function importWooCommerceBlueprint(
 						const optionResults: string[] = [];
 
 						for ( const [ key, value ] of optionEntries ) {
-							const wpCliResult = await server.executeWpCliCommand(
-								`option update ${ key } '${ JSON.stringify( value ) }'`
-							);
+							try {
+								// For complex values (objects/arrays), write to temp file and use wp eval
+								// This completely avoids shell escaping issues that can crash PHP
+								if ( typeof value === 'object' && value !== null ) {
+									// Write JSON to temporary file in site's filesystem
+									const tempJsonFileName = `woo-blueprint-option-${ key.replace( /[^a-zA-Z0-9]/g, '_' ) }-${ Date.now() }.json`;
+									const tempJsonPath = nodePath.join( server.details.path, tempJsonFileName );
+									const jsonValue = JSON.stringify( value );
+									await fsPromises.writeFile( tempJsonPath, jsonValue, 'utf-8' );
 
-							if ( wpCliResult.exitCode === 0 ) {
-								optionResults.push( sprintf( __( 'Set %s' ), key ) );
-							} else {
+									try {
+										// Verify the file was written correctly
+										if ( ! ( await pathExists( tempJsonPath ) ) ) {
+											throw new Error( __( 'Failed to create temporary JSON file' ) );
+										}
+
+										// Write PHP code to a temporary file to avoid shell escaping issues
+										// Use a simple filename with only alphanumeric characters and underscores to avoid escaping issues
+										const safeKey = key.replace( /[^a-zA-Z0-9]/g, '_' );
+										const timestamp = Date.now();
+										const tempPhpFileName = `woo_blueprint_option_${ safeKey }_${ timestamp }.php`;
+										const tempPhpPath = nodePath.join( server.details.path, tempPhpFileName );
+										
+										// Build PHP code that reads the JSON file and sets the option
+										// Escape the option key and filename for use in PHP code
+										const escapedKey = key.replace( /\\/g, '\\\\' ).replace( /'/g, "\\'" );
+										const escapedFileName = tempJsonFileName.replace( /\\/g, '\\\\' ).replace( /'/g, "\\'" );
+										
+										const phpCode = `<?php
+$f = '${ escapedFileName }';
+if ( ! file_exists( $f ) ) {
+	echo 'File not found: ' . $f;
+	exit( 1 );
+}
+$j = file_get_contents( $f );
+if ( $j === false ) {
+	echo 'Failed to read file: ' . $f;
+	exit( 1 );
+}
+$v = json_decode( $j, true );
+$err = json_last_error();
+if ( $err !== JSON_ERROR_NONE ) {
+	echo 'JSON decode error (' . $err . '): ' . json_last_error_msg() . ' | File: ' . $f . ' | Content length: ' . strlen( $j );
+	exit( 1 );
+}
+update_option( '${ escapedKey }', $v );
+echo 'Success';
+if ( file_exists( $f ) ) {
+	unlink( $f );
+}
+if ( file_exists( __FILE__ ) ) {
+	unlink( __FILE__ );
+}
+`;
+										
+										// Write PHP file to site's filesystem
+										await fsPromises.writeFile( tempPhpPath, phpCode, 'utf-8' );
+
+										try {
+											// Execute the PHP file using wp eval with require
+											// The filename is safe (only alphanumeric and underscores), so we can use it directly
+											// Use single quotes for the outer eval command to avoid shell interpretation
+											const evalCommand = `eval 'require "${ tempPhpFileName }";'`;
+											
+											const wpCliResult = await server.executeWpCliCommand(
+												evalCommand,
+												{ skipPluginsAndThemes: true }
+											);
+
+											if ( wpCliResult.exitCode === 0 ) {
+												optionResults.push( sprintf( __( 'Set %s' ), key ) );
+											} else {
+												// Include both stderr and stdout in error message for debugging
+												const errorMsg = [ wpCliResult.stderr, wpCliResult.stdout ]
+													.filter( ( msg ) => msg && msg.trim() )
+													.join( ' | ' ) || __( 'Unknown error' );
+												optionResults.push(
+													sprintf( __( 'Failed to set %s: %s' ), key, errorMsg )
+												);
+											}
+										} finally {
+											// Clean up PHP file if it still exists (it should delete itself, but just in case)
+											try {
+												if ( await pathExists( tempPhpPath ) ) {
+													await fsPromises.unlink( tempPhpPath );
+												}
+											} catch ( cleanupError ) {
+												writeLogToFile(
+													'warn',
+													`Failed to cleanup temp PHP file: ${ tempPhpPath }`
+												);
+											}
+										}
+									} catch ( evalError ) {
+										// Clean up temp file on error
+										try {
+											if ( await pathExists( tempJsonPath ) ) {
+												await fsPromises.unlink( tempJsonPath );
+											}
+										} catch {
+											// Ignore cleanup errors
+										}
+										optionResults.push(
+											sprintf( __( 'Failed to set %s: %s' ), key, evalError instanceof Error ? evalError.message : String( evalError ) )
+										);
+									}
+								} else {
+									// For simple values (strings, numbers, booleans), use direct command
+									let valueArg: string;
+									if ( typeof value === 'string' ) {
+										// Escape single quotes for shell
+										valueArg = `'${ value.replace( /'/g, "'\\''" ) }'`;
+									} else {
+										// For numbers, booleans, etc., convert to string
+										valueArg = String( value );
+									}
+
+									const wpCliResult = await server.executeWpCliCommand(
+										`option update ${ key } ${ valueArg }`,
+										{ skipPluginsAndThemes: true }
+									);
+
+									if ( wpCliResult.exitCode === 0 ) {
+										optionResults.push( sprintf( __( 'Set %s' ), key ) );
+									} else {
+										optionResults.push(
+											sprintf( __( 'Failed to set %s: %s' ), key, wpCliResult.stderr || '' )
+										);
+									}
+								}
+							} catch ( optionError ) {
 								optionResults.push(
-									sprintf( __( 'Failed to set %s: %s' ), key, wpCliResult.stderr || '' )
+									sprintf( __( 'Failed to set %s: %s' ), key, optionError instanceof Error ? optionError.message : String( optionError ) )
 								);
 							}
 						}
@@ -1836,19 +2087,60 @@ export async function importWooCommerceBlueprint(
 							continue;
 						}
 
-						// Execute SQL using WP-CLI db query
-						const wpCliResult = await server.executeWpCliCommand(
-							`db query "${ sqlQuery.replace( /"/g, '\\"' ) }"`
-						);
+						// Convert MySQL syntax to SQLite-compatible syntax
+						// This converts REPLACE INTO to INSERT OR REPLACE INTO, etc.
+						const convertedSql = convertMySqlToSqlite( sqlQuery );
 
-						results.push( {
-							step: 'runSql',
-							success: wpCliResult.exitCode === 0,
-							message:
-								wpCliResult.exitCode === 0
-									? __( 'SQL query executed successfully' )
-									: wpCliResult.stderr || __( 'Failed to execute SQL query' ),
-						} );
+						// Write SQL to temporary file and import using sqlite import
+						// This is safer than using db query with string escaping
+						const sqlTempFileName = `woo-blueprint-sql-${ Date.now() }.sql`;
+						const sqlTempFilePath = nodePath.join( server.details.path, sqlTempFileName );
+
+						try {
+							// Write converted SQL query to temp file
+							await fsPromises.writeFile( sqlTempFilePath, convertedSql, 'utf-8' );
+
+							// Import using sqlite import with --skip-plugins and --skip-themes
+							// to avoid plugin errors during SQL execution
+							const wpCliResult = await server.executeWpCliCommand(
+								`sqlite import ${ sqlTempFileName } --require=/tmp/sqlite-command/command.php --enable-ast-driver`,
+								{
+									targetPhpVersion: getWordPressProvider().DEFAULT_PHP_VERSION,
+									skipPluginsAndThemes: true,
+								}
+							);
+
+							results.push( {
+								step: 'runSql',
+								success: wpCliResult.exitCode === 0,
+								message:
+									wpCliResult.exitCode === 0
+										? __( 'SQL query executed successfully' )
+										: wpCliResult.stderr || __( 'Failed to execute SQL query' ),
+							} );
+						} catch ( sqlError ) {
+							results.push( {
+								step: 'runSql',
+								success: false,
+								message:
+									sqlError instanceof Error
+										? sqlError.message
+										: __( 'Failed to execute SQL query' ),
+							} );
+						} finally {
+							// Clean up temp SQL file
+							try {
+								if ( await pathExists( sqlTempFilePath ) ) {
+									await fsPromises.unlink( sqlTempFilePath );
+								}
+							} catch ( cleanupError ) {
+								// Log but don't fail if cleanup fails
+								writeLogToFile(
+									'warn',
+									`Failed to cleanup temp SQL file: ${ sqlTempFilePath }`
+								);
+							}
+						}
 						break;
 					}
 
@@ -1872,6 +2164,27 @@ export async function importWooCommerceBlueprint(
 		}
 
 		const allSuccessful = results.every( ( r ) => r.success );
+
+		// Restart the server to ensure clean state after blueprint import
+		// This helps avoid issues where plugins or database changes break the site
+		if ( server.details.running ) {
+			try {
+				writeLogToFile( 'info', 'Restarting server after Woo Blueprint import to ensure clean state' );
+				await server.stop();
+				// Small delay to ensure clean shutdown
+				await new Promise( ( resolve ) => setTimeout( resolve, 1000 ) );
+				await startServer( _event, server.details.id );
+			} catch ( restartError ) {
+				writeLogToFile(
+					'warn',
+					`Failed to restart server after blueprint import: ${
+						restartError instanceof Error ? restartError.message : String( restartError )
+					}`
+				);
+				// Don't fail the import if restart fails, but log it
+			}
+		}
+
 		return {
 			success: allSuccessful,
 			results,

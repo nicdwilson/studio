@@ -45,6 +45,13 @@ export function convertMySqlToSqlite( sql: string ): string {
 	// Clean up any trailing commas in CREATE TABLE statements
 	convertedSql = convertedSql.replace( /,(\s*\))/g, '$1' );
 
+	// Remove backticks around identifiers (not needed in SQLite)
+	convertedSql = convertedSql.replace( /`/g, '' );
+
+	// Qualify WordPress tables with the main database name used by SQLite (main.wp_*)
+	// Avoid double-prefixing if already qualified
+	convertedSql = convertedSql.replace( /(?<!main\.)(wp_[A-Za-z0-9_]+)/g, 'main.$1' );
+
 	// Clean up multiple spaces and empty lines
 	convertedSql = convertedSql.replace( /\s+/g, ' ' );
 	convertedSql = convertedSql.replace( /\n\s*\n/g, '\n' );

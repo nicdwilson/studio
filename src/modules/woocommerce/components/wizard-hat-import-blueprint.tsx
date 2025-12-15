@@ -1,7 +1,8 @@
 import { Button, Card, Spinner, Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { useI18n } from '@wordpress/react-i18n';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { download, copy } from '@wordpress/icons';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { getIpcApi } from 'src/lib/get-ipc-api';
 
@@ -228,6 +229,36 @@ export function WizardHatImportBlueprint() {
 
 	const stepSummary = getStepSummary();
 
+	const formatImportResultsAsText = useCallback( ( results: ImportResult[] ): string => {
+		const lines: string[] = [];
+		lines.push( '=== Woo Blueprint Import Results ===' );
+		lines.push( '' );
+		lines.push( `Date: ${ new Date().toLocaleString() }` );
+		lines.push( `Site: ${ selectedSite?.name || 'Unknown' }` );
+		lines.push( '' );
+		lines.push( '--- Results ---' );
+		lines.push( '' );
+
+		results.forEach( ( result, index ) => {
+			const status = result.success ? '✓ SUCCESS' : '✗ FAILED';
+			lines.push( `${ index + 1 }. [${ status }] ${ result.step }` );
+			lines.push( `   ${ result.message }` );
+			lines.push( '' );
+		} );
+
+		lines.push( '--- Summary ---' );
+		lines.push( '' );
+		const successful = results.filter( ( r ) => r.success ).length;
+		const failed = results.filter( ( r ) => ! r.success ).length;
+		lines.push( `Total Steps: ${ results.length }` );
+		lines.push( `Successful: ${ successful }` );
+		lines.push( `Failed: ${ failed }` );
+		lines.push( '' );
+		lines.push( '=== End of Import Results ===' );
+
+		return lines.join( '\n' );
+	}, [ selectedSite?.name ] );
+
 	return (
 		<div className="space-y-8">
 			<div className="max-w-3xl px-8">
@@ -338,7 +369,67 @@ export function WizardHatImportBlueprint() {
 			{ /* Import Results */ }
 			{ importResults.length > 0 && (
 				<Card className="p-6">
-					<h3 className="text-lg font-medium text-gray-900 mb-4">{ __( 'Import Results' ) }</h3>
+					<div className="flex items-center justify-between mb-4">
+						<h3 className="text-lg font-medium text-gray-900">{ __( 'Import Results' ) }</h3>
+						<div className="flex items-center gap-2">
+							<Button
+								variant="secondary"
+								icon={ copy }
+								onClick={ async () => {
+									const logText = formatImportResultsAsText( importResults );
+									await getIpcApi().copyText( logText );
+									getIpcApi().showNotification( {
+										title: __( 'Copied to clipboard' ),
+										body: __( 'Import results copied to clipboard' ),
+									} );
+								} }
+							>
+								{ __( 'Copy Log' ) }
+							</Button>
+							<Button
+								variant="secondary"
+								icon={ download }
+								onClick={ async () => {
+									const logText = formatImportResultsAsText( importResults );
+									const timestamp = new Date().toISOString().replace( /[:.]/g, '-' );
+									const defaultFileName = `woo-blueprint-import-${ timestamp }.txt`;
+
+									try {
+										const filePath = await getIpcApi().showSaveAsDialog( {
+											defaultPath: defaultFileName,
+											filters: [
+												{ name: 'Text Files', extensions: [ 'txt' ] },
+												{ name: 'All Files', extensions: [ '*' ] },
+											],
+										} );
+
+										if ( filePath ) {
+											const result = await getIpcApi().writeFile( filePath, logText );
+											if ( result.success ) {
+												getIpcApi().showNotification( {
+													title: __( 'File saved' ),
+													body: __( 'Import results saved successfully' ),
+												} );
+											} else {
+												getIpcApi().showNotification( {
+													title: __( 'Error' ),
+													body: result.error || __( 'Failed to save file' ),
+												} );
+											}
+										}
+									} catch ( error ) {
+										console.error( 'Error saving file:', error );
+										getIpcApi().showNotification( {
+											title: __( 'Error' ),
+											body: error instanceof Error ? error.message : __( 'Failed to save file' ),
+										} );
+									}
+								} }
+							>
+								{ __( 'Save Log' ) }
+							</Button>
+						</div>
+					</div>
 
 					<div className="space-y-2 max-h-60 overflow-y-auto">
 						{ importResults.map( ( result, index ) => (
