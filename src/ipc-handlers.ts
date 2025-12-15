@@ -1542,16 +1542,52 @@ export async function installPluginFromLocalRepo(
 			};
 		}
 
-		const result = await server.executeWpCliCommand(
-			`plugin install "${ pluginZipPath }" --activate --force`
-		);
+		// Copy zip file to site's filesystem so WP-CLI can access it
+		// WP-CLI runs in PHP WASM which can't access host filesystem paths directly
+		const sitePath = server.details.path;
+		const tempZipName = `temp-plugin-${ pluginName }-${ Date.now() }.zip`;
+		const tempZipPath = nodePath.join( sitePath, tempZipName );
 
-		if ( result.exitCode === 0 ) {
-			return { success: true };
-		} else {
+		try {
+			// Copy the zip file to the site's root directory
+			await fsPromises.copyFile( pluginZipPath, tempZipPath );
+
+			// Use relative path from WordPress root for WP-CLI
+			const result = await server.executeWpCliCommand(
+				`plugin install "${ tempZipName }" --activate --force`
+			);
+
+			// Clean up temp file
+			try {
+				await fsPromises.unlink( tempZipPath );
+			} catch ( cleanupError ) {
+				// Log but don't fail if cleanup fails
+				writeLogToFile( 'warn', `Failed to cleanup temp zip file: ${ tempZipPath }` );
+			}
+
+			if ( result.exitCode === 0 ) {
+				return { success: true };
+			} else {
+				return {
+					success: false,
+					error: result.stderr || __( 'Failed to install plugin' ),
+				};
+			}
+		} catch ( copyError ) {
+			// Clean up temp file if copy failed
+			try {
+				if ( await pathExists( tempZipPath ) ) {
+					await fsPromises.unlink( tempZipPath );
+				}
+			} catch {
+				// Ignore cleanup errors
+			}
+
+			const errorMessage =
+				copyError instanceof Error ? copyError.message : String( copyError );
 			return {
 				success: false,
-				error: result.stderr || __( 'Failed to install plugin' ),
+				error: sprintf( __( 'Failed to copy plugin zip file: %s' ), errorMessage ),
 			};
 		}
 	} catch ( error ) {

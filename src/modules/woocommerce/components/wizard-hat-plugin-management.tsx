@@ -165,8 +165,7 @@ export function WizardHatPluginManagement() {
 				( plugin ) =>
 					plugin.label.toLowerCase().includes( term ) || plugin.value.toLowerCase().includes( term )
 			)
-			.filter( ( plugin ) => ! selectedPlugins.includes( plugin.value ) )
-			.slice( 0, 10 );
+			.filter( ( plugin ) => ! selectedPlugins.includes( plugin.value ) );
 	}, [ searchTerm, allPremiumPlugins, selectedPlugins ] );
 
 	const handleSearchChange = useCallback(

@@ -18,18 +18,6 @@ export function RepositorySetup( { isOpen, onClose }: RepositorySetupProps ) {
 	const [ validationSuccess, setValidationSuccess ] = useState( false );
 
 	// All hooks must be called before any conditional returns
-	useIpcListener( 'repository-path-validated', ( _, data ) => {
-		if ( data.valid ) {
-			setValidationSuccess( true );
-			setValidationError( null );
-			setIsValidating( false );
-		} else {
-			setValidationSuccess( false );
-			setValidationError( data.error || __( 'Invalid repository path' ) );
-			setIsValidating( false );
-		}
-	} );
-
 	useIpcListener( 'repository-path-saved', ( _, data ) => {
 		if ( data.success ) {
 			onClose();
@@ -59,7 +47,23 @@ export function RepositorySetup( { isOpen, onClose }: RepositorySetupProps ) {
 		setValidationError( null );
 		setValidationSuccess( false );
 
-		getIpcApi().validateRepositoryPath( repositoryPath );
+		try {
+			const result = await getIpcApi().validateRepositoryPath( repositoryPath );
+			if ( result.valid ) {
+				setValidationSuccess( true );
+				setValidationError( null );
+			} else {
+				setValidationSuccess( false );
+				setValidationError( result.error || __( 'Invalid repository path' ) );
+			}
+		} catch ( error ) {
+			setValidationSuccess( false );
+			setValidationError(
+				error instanceof Error ? error.message : __( 'Error validating repository path' )
+			);
+		} finally {
+			setIsValidating( false );
+		}
 	};
 
 	const handleSave = async () => {
