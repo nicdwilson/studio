@@ -302,6 +302,16 @@ export function WizardHatPluginManagement() {
 					`\n❌ Failed to install: ${ results.failed.map( ( f ) => f.plugin ).join( ', ' ) }`,
 				] );
 			}
+
+			// Remove successfully installed plugins from selection
+			// Keep failed plugins selected so user can retry
+			const failedPluginValues = pluginsToInstall
+				.filter( ( plugin ) =>
+					results.failed.some( ( failed ) => failed.plugin === plugin.label )
+				)
+				.map( ( plugin ) => plugin.value );
+
+			setSelectedPlugins( failedPluginValues );
 		} catch ( error ) {
 			console.error( 'Error during plugin installation:', error );
 			setInstallationLog( ( prev ) => [
