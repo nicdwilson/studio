@@ -237,20 +237,16 @@ export function WizardHatOverview() {
 				<ol className="text-blue-800 space-y-2">
 					<li className="flex items-start">
 						<span className="font-medium mr-2">1.</span>
-						<span>{ __( 'Set up Jurassic Tube for external access and payment testing' ) }</span>
-					</li>
-					<li className="flex items-start">
-						<span className="font-medium mr-2">2.</span>
 						<span>{ __( 'Configure your shop settings for the appropriate locale' ) }</span>
 					</li>
 					<li className="flex items-start">
-						<span className="font-medium mr-2">3.</span>
+						<span className="font-medium mr-2">2.</span>
 						<span>
 							{ __( 'Install necessary WooCommerce plugins for your development needs' ) }
 						</span>
 					</li>
 					<li className="flex items-start">
-						<span className="font-medium mr-2">4.</span>
+						<span className="font-medium mr-2">3.</span>
 						<span>{ __( 'Use the developer tools for testing and debugging' ) }</span>
 					</li>
 				</ol>

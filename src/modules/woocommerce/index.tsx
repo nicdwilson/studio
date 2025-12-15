@@ -3,7 +3,6 @@ import { useI18n } from '@wordpress/react-i18n';
 import { useState, createContext, useContext } from 'react';
 import { useSiteDetails } from 'src/hooks/use-site-details';
 import { WizardHatImportBlueprint } from './components/wizard-hat-import-blueprint';
-import { WizardHatJurassicTube } from './components/wizard-hat-jurassic-tube';
 import { WizardHatOverview } from './components/wizard-hat-overview';
 import { WizardHatPluginManagement } from './components/wizard-hat-plugin-management';
 import { WizardHatShopConfig } from './components/wizard-hat-shop-config';
@@ -14,8 +13,7 @@ export type WizardHatTabName =
 	| 'shop-config'
 	| 'plugin-management'
 	| 'tools'
-	| 'import-blueprint'
-	| 'jurassic-tube';
+	| 'import-blueprint';
 
 interface WizardHatTab {
 	name: WizardHatTabName;
@@ -48,11 +46,6 @@ const tabs: WizardHatTab[] = [
 		name: 'import-blueprint',
 		label: __( 'Import Blueprint' ),
 		component: WizardHatImportBlueprint,
-	},
-	{
-		name: 'jurassic-tube',
-		label: __( 'Jurassic Tube' ),
-		component: WizardHatJurassicTube,
 	},
 ];
 
